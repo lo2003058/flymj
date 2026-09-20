@@ -145,6 +145,69 @@ buffer，masked-out 嘅位永遠係 0。
 冇分別」更精細：分別喺於「形狀」（sparse expansion），唔喺於「圖案」
 （specific wiring）。
 
+## Follow-up 實驗：Dataset Scaling
+
+上面 A/B/C 三條 arm 用緊嘅係 2009 年一年、3000 檔、155 萬個決策。跑完之後
+另外開咗條獨立嘅問題：**淨係加大 training data（唔改連接結構），Arm A
+會唔會打得叻好多？**——呢條同「邊種連接結構好」係兩個獨立問題，用獨立嘅
+script/檔案做（`*_scaled` 系列），冇覆蓋原本嗰批用嚟做 A/B/C 對照嘅
+dataset/結果。
+
+**做法**：落多 2010-2018 共 9 年嘅天鳳鳳凰卓牌譜（同 2009 年一樣嘅嚟源），
+每年攞頭 3000 檔（同原本一致嘅 per-year cap），10 年一齊夾埋，令
+train/val/test 三邊都有齊 10 年嘅代表性（唔會出現淨用舊年代 train、新年代
+test 嘅 meta drift）。得 15,470,316 個決策，10 倍於原本。淨係 train
+Arm A（真 connectome），5 個 seed，同原本 experiment_results.csv 入面
+嗰 5 個 Arm A seed 比較。
+
+**結果**：
+
+| Dataset | 決策數 | mean test_acc | std | n(seed) |
+|---|---|---|---|---|
+| 原本（2009 年，3000 檔） | 1,556,465 | 65.73% | 0.15% | 5 |
+| Scaled（2009-2018，30000 檔） | 15,470,316 | **69.72%** | 0.04% | 5 |
+
+差距 = **+3.99 個百分點**，Welch t = 58.16（p≈0），permutation test（10 萬次
+重抽樣）p = 0.0024，Cohen's d = 36.78（比 A vs C 嗰個「巨大」效應量仲要
+大成 10 倍）。5 個 seed 之間嘅 std 仲細咗（0.15%→0.04%），結果非常一致。
+
+**結論**：喺呢個 task 度，「加大 training data」對準確度嘅影響，遠遠大過
+「用邊種連接結構」（+4pp vs A-B 嗰 0.12pp 唔顯著嘅差距）。連接拓撲決定
+「起跑點」，但 data 規模先係真正嘅樽頸——同深度學習領域嘅一般認知一致，
+但透過呢個乾淨嘅對照實驗喺呢個特定 task 上親身驗證咗一次。
+
+跑法/產出見下面「檔案索引」入面 `*_scaled` 果幾行；`data/processed/model_arm_a.pt`
+（俾兩個本機 app 用嗰個部署 checkpoint）已經改用呢個 scaled dataset 重新
+train 過。
+
+**Action model 都做埋一次**：`game_app.py`（成局遊戲）同 `app.py` 嘅
+叫牌/立直/自摸/防守建議，用緊嘅其實係另一個 model
+（`action_model_arm_a.pt`），訓練資料同上面嗰個純掉牌 dataset 唔同（連
+pon/chii/kan/riichi/ron/pass 都有）。用同一批 2009-2018 牌譜，經
+`build_action_dataset_scaled.py`（replay+oracle，見 `validate_replay.py`）
+砌出 19,656,702 個原始決策，PASS 20% subsample 後 17,069,986 個，重新
+train 過：
+
+| Head | 原本（2009 年） | Scaled（2009-2018） |
+|---|---|---|
+| self_type | – | 98.74% |
+| discard | – | 68.93% |
+| reaction | – | 88.22% |
+| **overall** | – | **84.10%** |
+
+（原本嗰個部署 checkpoint 冇留低獨立嘅 test accuracy 記錄，所以呢度冇得
+直接對比個百分比，但用嘅係完全同一套 pipeline/config，唯一分別係 dataset
+大細——依原理應該跟隨返上面純掉牌 model 見到嘅同一個方向：data 越多，
+model 越叻。）呢個 checkpoint 已經部署緊。
+
+**做呢兩個 scaling job 期間踩過嘅坑**：一次過將 1500-2000 萬行、每行帶
+nested list 欄位（hand_counts/meld_counts/discard_counts 等）嘅
+Python dict 砌成一個 polars DataFrame，會將成個 dataset 喺記憶體度複製
+好幾份（filter/concat/sort 各一份），喺 32GB RAM 嘅機度俾 OOM kill 咗
+兩次。修正做法：（1）逐年分開砌、逐年即刻寫落 disk 做 cache（令個 script
+可以斷咗續返，唔使由頭嚟過），（2）最後 subsample 嗰步用 numpy 揀 index
+再一次過 filter，唔好分開 filter 兩份再 concat 再 sort。
+
 ## 限制
 
 - **A vs B 嘅比較唔對稱**：A 得一條真 mask，5 個 run 之間淨係 model
@@ -155,8 +218,10 @@ buffer，masked-out 嘅位永遠係 0。
   冇夾實際邊個 PN 特別多產出（fan-out）。真實 connectome 入面，唔同 PN
   嘅出度分佈可能好唔平均；random mask 打散咗呢種異質性。呢個係實驗刻意嘅
   設計（保持乾淨嘅對照），唔係漏洞，但解讀結論時要記住呢點。
-- **牌譜資料**：淨係用咗 2009 年，未涵蓋唔同年代嘅打法 meta 變化；資料嚟源
-  嘅 ToS 狀態未有官方書面確認（見上面「資料使用聲明」）。
+- **牌譜資料**：A/B/C 三條 arm 對照淨係用咗 2009 年，未涵蓋唔同年代嘅打法
+  meta 變化（下面「Follow-up 實驗」加咗 2010-2018，但淨係用嚟 train
+  Arm A，冇再重做 A vs B 嘅拓撲對照）；資料嚟源嘅 ToS 狀態未有官方書面
+  確認（見上面「資料使用聲明」）。
 - **絕對準確度**：65-66% 落喺文獻合理範圍，但個 model（Conv1d 前端 + 32
   channel 手作 feature）本身冇經過大幅調優，唔應該用嚟同 SOTA model 比較
   絕對表現。
@@ -183,3 +248,11 @@ buffer，masked-out 嘅位永遠係 0。
 | `src/pilot_compare.py` | Pilot（1 A + 1 B） | 7 |
 | `src/run_experiment.py` | 全套 30 run，`data/processed/experiment_results.csv`/`experiment_history.parquet` | 7 |
 | `src/plot_experiment.py` | `artifacts/arm_comparison.png` | 8 |
+| `src/train_and_save_model.py` | `data/processed/model_arm_a.pt`（部署用，已改用 scaled dataset） | 8/app |
+| `src/download_paifu_years.py` | 落 2010-2018 牌譜（Follow-up） | scaling |
+| `src/build_discard_dataset_scaled.py` | `data/processed/discard_dataset_scaled.parquet`（10 年） | scaling |
+| `src/build_features_scaled.py` | `data/processed/features_scaled.npz`（10 年） | scaling |
+| `src/train_scaling_experiment.py` | `data/processed/scaling_results.csv`，Arm A scaled vs 原本嘅統計對比 | scaling |
+| `src/build_action_dataset_scaled.py` | `data/processed/action_dataset_scaled.parquet`（10 年，逐年 cache） | scaling |
+| `src/build_action_features_scaled.py` | `data/processed/action_features_scaled.npz`（10 年） | scaling |
+| `src/train_action_model.py` | `data/processed/action_model_arm_a.pt`（部署用，已改用 scaled dataset） | scaling/app |

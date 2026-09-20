@@ -45,6 +45,30 @@ In short: **what wins is the "sparse expansion" shape, not the fly's
 particular wiring diagram.** Full methodology/statistics/limitations are in
 [`data/doc/writeup.md`](data/doc/writeup.md) (Cantonese).
 
+### Follow-up: does more data help more than the wiring does?
+
+A separate, independent experiment: keep Arm A's real connectome mask fixed
+and just train it on 10x more data (2009-2018, ~15.5M decisions instead of
+~1.55M) — does it get meaningfully smarter?
+
+| Dataset | Decisions | Mean test accuracy (5 seeds) | std |
+|---|---|---|---|
+| Original (2009 only) | 1,556,465 | 65.73% | 0.15% |
+| Scaled (2009–2018) | 15,470,316 | **69.72%** | 0.04% |
+
+**+3.99 points**, Welch t=58.16 (p≈0), permutation test p=0.0024, Cohen's
+d=36.78 — an order of magnitude larger effect than any wiring comparison
+above. At this task, dataset scale matters far more than which sparse
+wiring pattern is used. The deployed `model_arm_a.pt` checkpoint now uses
+this scaled dataset. Full details in the "Follow-up 實驗：Dataset Scaling"
+section of [`data/doc/writeup.md`](data/doc/writeup.md).
+
+The deployed `action_model_arm_a.pt` (the multi-head model both apps
+actually use for calls/riichi/tsumo/defense — `game_app.py`'s live game
+runs on this one, not `model_arm_a.pt` above) was retrained the same way,
+on 17.07M action decisions from the same 10 years: **overall test accuracy
+84.10%** (self_type 98.74%, discard 68.93%, reaction 88.22%).
+
 ## Two playable apps
 
 The Arm A (real connectome) model is wrapped into two local Streamlit apps:
@@ -94,6 +118,8 @@ is gitignored and needs to be regenerated locally:
 | — | `src/train_and_save_model.py` | `data/processed/model_arm_a.pt` (used by `app.py`) | masks + features |
 | — | `src/validate_replay.py` | validates the `jansou` replay engine reproduces historical logs 100% | mahjong logs |
 | — | `src/build_action_dataset.py` → `build_action_features.py` → `train_action_model.py` | `data/processed/action_model_arm_a.pt` (both apps use this for call/riichi/tsumo/defense suggestions) | mahjong logs + masks |
+| — | `src/download_paifu_years.py` → `build_discard_dataset_scaled.py` → `build_features_scaled.py` → `train_scaling_experiment.py` | `data/processed/scaling_results.csv` (the dataset-scaling follow-up above) | 2010–2018 mahjong logs |
+| — | `src/build_action_dataset_scaled.py` → `build_action_features_scaled.py` → `train_action_model.py` | `data/processed/action_model_arm_a.pt`, retrained on the scaled 10-year dataset | 2010–2018 mahjong logs + masks |
 
 For the full file index, what each step does, and why it's designed this
 way, see [`data/doc/writeup.md`](data/doc/writeup.md) (the research
@@ -133,8 +159,9 @@ dictionary-encoding bug when reading the raw feather files).
 - The degree-matched random mask only matches KC in-degree, not PN
   fan-out distribution — a deliberate design choice to keep the control
   clean, not an oversight.
-- The mahjong logs cover only 2009, so meta/strategy shifts across other
-  eras aren't represented.
+- The arm A/B/C wiring comparison itself only used 2009 logs, so
+  meta/strategy shifts across other eras aren't represented there (the
+  2010–2018 follow-up above only re-trained Arm A, not a full A/B/C rerun).
 - The 65–66% absolute accuracy is in a reasonable range versus published
   baselines (Bakuuchi 62.1%, CNN-based methods 68–70%, Suphx 76.7%), but the
   model itself hasn't been tuned and shouldn't be compared against

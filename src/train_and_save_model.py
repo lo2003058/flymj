@@ -1,6 +1,12 @@
 """Phase 1 Part 1：訓練一次 Arm A（真 connectome mask），存低 checkpoint
-俾之後嘅本機 UI 用嚟做 inference。用返同 run_experiment.py 一樣嘅 config
-（seed=0，同 experiment_results.csv 入面嗰個 arm=A seed=0 一致）。
+俾之後嘅本機 UI 用嚟做 inference。
+
+用返 features_scaled.npz（2009-2018 十年，~1550 萬個決策）嚟訓練，唔再用
+原本嗰 3000 檔/155 萬決策——train_scaling_experiment.py 已經證實用大幾倍
+嘅 dataset 可以將 test accuracy 由 65.7% 谷到 69.7%（+4pp，Welch p≈0，
+Cohen's d=36.8，見 data/doc/writeup.md 嘅 scaling 實驗一節），冇理由部署
+用緊細嗰份。跑法/config（seed=0、epoch/batch/lr）維持同
+run_experiment.py 一致，方便對照。
 
 輸出 data/processed/model_arm_a.pt，包含：
   - model_state: model 嘅 state_dict
@@ -15,7 +21,7 @@ import torch
 
 from train import train_one_arm
 
-FEATURES_PATH = "data/processed/features.npz"
+FEATURES_PATH = "data/processed/features_scaled.npz"
 MASKS_PATH = "data/processed/masks.npz"
 OUT_PATH = "data/processed/model_arm_a.pt"
 

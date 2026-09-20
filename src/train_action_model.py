@@ -1,5 +1,11 @@
 """Phase 2 Part 4：訓練 multi-head ActionNet（Arm A：真 connectome mask）。
 
+用 action_features_scaled.npz（2009-2018 十年，見 build_action_dataset_scaled.py
+/build_action_features_scaled.py）訓練，唔再用原本嗰 2009 年單年版本——
+train_scaling_experiment.py 已經證實過同一批擴大嘅牌譜可以將純掉牌 model
+嘅 test accuracy 由 65.7% 谷到 69.7%，冇理由呢個部署緊、game_app.py 實際
+用嚟做叫牌/立直/自摸/防守建議嘅 model 淨係用返細嗰份 dataset。
+
 跑法： uv run python src/train_action_model.py
 """
 
@@ -10,7 +16,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from action_model import REACTION_ACTION_TYPES, SELF_ACTION_TYPES, ActionNet
 
-FEATURES_PATH = "data/processed/action_features.npz"
+FEATURES_PATH = "data/processed/action_features_scaled.npz"
 MASKS_PATH = "data/processed/masks.npz"
 OUT_PATH = "data/processed/action_model_arm_a.pt"
 
