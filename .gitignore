@@ -11,3 +11,12 @@ wheels/
 
 # Downloaded / generated data (raw connectome + mahjong files are GB-scale)
 data/
+
+# IDE
+.idea/
+
+# OS
+.DS_Store
+
+# Secrets
+.env
