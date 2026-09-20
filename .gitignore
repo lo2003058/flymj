@@ -9,8 +9,11 @@ wheels/
 # Virtual environments
 .venv
 
-# Downloaded / generated data (raw connectome + mahjong files are GB-scale)
-data/
+# Downloaded / generated data (raw connectome + mahjong files are GB-scale).
+# data/doc/ is hand-written documentation, not generated data, so it's kept
+# tracked normally instead of needing `git add -f` every time it's edited.
+data/*
+!data/doc/
 
 # IDE
 .idea/

@@ -88,9 +88,9 @@ uv run streamlit run src/game_app.py --server.port 8502
 
 ## Rebuilding the pipeline from scratch
 
-This project started as an 8-step research pipeline. The entire `data/`
-directory (raw connectome + mahjong logs + training artifacts, several GB)
-is gitignored and needs to be regenerated locally:
+This project started as an 8-step research pipeline. Everything under
+`data/` except `data/doc/` (raw connectome + mahjong logs + training
+artifacts, several GB) is gitignored and needs to be regenerated locally:
 
 | # | Script | Produces | Needs |
 |---|---|---|---|
