@@ -1,12 +1,11 @@
-"""Step C (task.md): 畫 in-degree distribution，比較真 mask 同 random mask。
+"""Step C (task.md): plot in-degree distributions, comparing the real mask
+against the random mask.
 
-因為 random mask 係逐個 node degree-matched 生成，理論上真同隨機嘅
-in-degree 分佈應該完全重疊。如果冇重疊，代表 build_masks.py 有 bug。
+Since the random mask is generated per-node degree-matched, the real and
+random in-degree distributions should overlap exactly. If they don't,
+that means build_masks.py has a bug.
 
-Plot 入面嘅文字用英文，因為 matplotlib 預設字型冇 CJK glyph，用中文/廣東話
-會變晒方格。Print 出嚟嘅 log 就照用廣東話。
-
-跑法： uv run python src/plot_degrees.py
+Run: uv run python src/plot_degrees.py
 """
 
 import matplotlib
@@ -21,19 +20,22 @@ OUT_PATH = "artifacts/degree_dist.png"
 
 
 def plot_degree_overlay(ax, real_mask: np.ndarray, rand_masks: np.ndarray, title: str, xlabel: str) -> bool:
-    """畫一個 subplot：真 mask vs random mask(seed 0) 嘅 in-degree histogram overlay。
+    """Plot one subplot: an overlaid in-degree histogram of the real mask
+    vs. the random mask (seed 0).
 
-    回傳 real 同 rand seed 0 嘅 degree sequence 係咪逐個 node 完全一致。
+    Returns whether the real and rand-seed-0 degree sequences are exactly
+    identical node-for-node.
     """
     real_degree = real_mask.sum(axis=1)
     rand_degree_seed0 = rand_masks[0].sum(axis=1)
 
     max_degree = int(max(real_degree.max(), rand_degree_seed0.max()))
     if max_degree <= 30:
-        # 度數細，每個整數一格，方便睇實際分佈形狀（例如 PN->KC）
+        # Small degrees: one bin per integer, to see the actual distribution shape (e.g. PN->KC)
         bins = np.arange(0, max_degree + 2) - 0.5
     else:
-        # 度數大（例如 MBON 廣泛讀出成千 KC），逐個整數一格會變晒幼刺，改用固定 30 格
+        # Large degrees (e.g. MBON reads out broadly from thousands of KCs):
+        # one bin per integer would be all noise, use 30 fixed bins instead
         bins = np.linspace(0, max_degree, 31)
 
     ax.hist(real_degree, bins=bins, alpha=0.5, label="real connectome mask", color="tab:blue")
@@ -86,9 +88,9 @@ def main() -> None:
 
     fig.tight_layout()
     fig.savefig(OUT_PATH, dpi=150)
-    print(f"已存 {OUT_PATH}")
+    print(f"Saved {OUT_PATH}")
 
-    print("\n=== 逐個 seed 核對 degree 分佈係咪同真 mask 完全一致 ===")
+    print("\n=== checking each seed's degree distribution exactly matches the real mask ===")
     all_ok = True
     for name, real_mask, rand_masks in [
         ("PN->KC", d["mask_pn_kc_real"], d["mask_pn_kc_rand"]),
@@ -99,12 +101,12 @@ def main() -> None:
             rand_degree = np.sort(rand_masks[seed].sum(axis=1))
             match = np.array_equal(real_degree, rand_degree)
             all_ok = all_ok and match
-            print(f"{name} seed {seed}: degree 分佈同真 mask 一致 = {match}")
+            print(f"{name} seed {seed}: degree distribution matches real mask = {match}")
 
     if not all_ok or not (ok_pn_kc and ok_kc_mbon):
-        raise AssertionError("有 mask 嘅 degree 分佈同真 mask 對唔上，build_masks.py 大概有 bug")
+        raise AssertionError("Some mask's degree distribution doesn't match the real mask — build_masks.py probably has a bug")
 
-    print("\n全部一致，degree-matched 冇問題。")
+    print("\nAll consistent, degree-matching is fine.")
 
 
 if __name__ == "__main__":

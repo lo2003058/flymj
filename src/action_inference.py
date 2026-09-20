@@ -1,4 +1,5 @@
-"""Phase 2 Part 5：Multi-head action model 嘅推理封裝，俾 UI 用。"""
+"""Phase 2 Part 5: inference wrapper around the multi-head action model,
+for the UI to use."""
 
 from dataclasses import dataclass
 
@@ -10,8 +11,8 @@ from action_model import REACTION_ACTION_TYPES, SELF_ACTION_TYPES, ActionNet
 
 
 def load_action_model(checkpoint_path: str, masks_npz, device: torch.device) -> ActionNet:
-    # weights_only=False：呢個 checkpoint 淨係由 train_action_model.py 呢個
-    # 本地 script 產生，唔係下載返嚟嘅唔信任檔案（同 inference.py 一致）。
+    # weights_only=False: this checkpoint is only ever produced locally by
+    # train_action_model.py, not an untrusted downloaded file.
     ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
     mask_pn_kc = torch.tensor(masks_npz["mask_pn_kc_real"], dtype=torch.float32, device=device)
     mask_kc_mbon = torch.tensor(masks_npz["mask_kc_mbon_real"], dtype=torch.float32, device=device)
@@ -23,7 +24,7 @@ def load_action_model(checkpoint_path: str, masks_npz, device: torch.device) -> 
 
 @dataclass
 class ActionPredictionResult:
-    self_type_ranked: list[tuple[str, float]]  # 由高到低
+    self_type_ranked: list[tuple[str, float]]  # highest to lowest
     reaction_ranked: list[tuple[str, float]]
     discard_ranked_hand_tiles: list[tuple[int, float]]
     activations: dict[str, np.ndarray]

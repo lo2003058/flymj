@@ -1,9 +1,12 @@
-"""Phase 2 Part 1：一個「decide」callback，答返歷史牌譜實際做過嘅 action，
-等 jansou.game.flow.deal_steps 可以逐步重演一場歷史牌局，唔使真係隨機行棋。
+"""Phase 2 Part 1: a "decide" callback that answers with whatever action
+the historical log actually took, so jansou.game.flow.deal_steps can
+replay a historical match step by step instead of playing randomly.
 
-做法：維持一個行緊嘅 event pointer，jansou 問到邊個 decision，就睇返歷史
-event stream 嗰陣做咗咩，揀返 legal actions 入面對應嗰個。揾唔到就拋
-OracleMismatch，等驗證嗰陣即刻發現係邊度對唔上，唔會靜雞雞行錯。
+How it works: keeps a pointer into the event stream being replayed. Every
+time jansou asks for a decision, it checks what the historical event
+stream did at that point and picks the matching legal action. If no match
+is found, it raises OracleMismatch, so validation immediately surfaces
+exactly where the replay diverges instead of silently going wrong.
 """
 
 from jansou.core.hand import MeldType
@@ -28,7 +31,8 @@ from jansou.io.paifu import Call, Discard as PaifuDiscard, DoraReveal, Draw, Kit
 
 
 class OracleMismatch(Exception):
-    """歷史記錄同 jansou 提供嘅 legal action 對唔上，或者揾唔到對應嘅 event。"""
+    """The historical record doesn't match what jansou offers as a legal
+    action, or no corresponding event could be found."""
 
 
 class HistoricalOracle:
@@ -38,8 +42,10 @@ class HistoricalOracle:
         self.ptr = 0
 
     def _peek(self):
-        """睇下個 event，自動跳過 DoraReveal（jansou 個 engine 自己會 emit
-        返呢啲，唔係一個要揀嘅決策，我哋淨係要跳過佢搵返下一個真正相關嘅 event）。"""
+        """Look at the next event, automatically skipping DoraReveal (the
+        jansou engine emits these on its own — they're not a decision to
+        make, we just need to skip past them to find the next actually
+        relevant event)."""
         while self.ptr < len(self.events) and isinstance(self.events[self.ptr], DoraReveal):
             self.ptr += 1
         return self.events[self.ptr] if self.ptr < len(self.events) else None
@@ -51,7 +57,7 @@ class HistoricalOracle:
         for action in actions:
             if isinstance(action, cls):
                 return action
-        raise OracleMismatch(f"actions={actions} 入面揾唔到 {cls.__name__}")
+        raise OracleMismatch(f"couldn't find a {cls.__name__} among actions={actions}")
 
     def decide(self, seat: int, kind: DecisionKind, actions: list[Action]) -> Action:
         if kind == DecisionKind.SELF:
@@ -62,15 +68,16 @@ class HistoricalOracle:
             return self._decide_rob(seat, actions)
         if kind == DecisionKind.TENPAI:
             return self._decide_tenpai(seat, actions)
-        raise OracleMismatch(f"未處理嘅 decision kind: {kind}")
+        raise OracleMismatch(f"unhandled decision kind: {kind}")
 
     # --- SELF ---
 
     def _decide_self(self, seat: int, actions: list[Action]) -> Action:
         event = self._peek()
         if isinstance(event, Draw) and event.seat == seat:
-            # 正常回合：先摸咗張牌。如果啱啱叫咗嘢（pon/chii）先嚟到呢個
-            # SELF decision，中間冇摸牌，event 會直接係嗰個 Discard。
+            # Normal turn: a tile was just drawn. If this SELF decision
+            # came right after a call (pon/chii) with no draw in between,
+            # the event will already be the Discard itself.
             self.ptr += 1
             event = self._peek()
 
@@ -89,16 +96,17 @@ class HistoricalOracle:
                 if isinstance(action, cls) and action.tile == event.tile and action.tsumogiri == event.tsumogiri:
                     return action
             raise OracleMismatch(
-                f"揾唔到啱嘅 {cls.__name__}(tile={event.tile}, tsumogiri={event.tsumogiri})，actions={actions}"
+                f"couldn't find a matching {cls.__name__}(tile={event.tile}, tsumogiri={event.tsumogiri}), actions={actions}"
             )
 
-        # 冇更多 event 屬於呢個 seat：即係話呢鋪 tsumo 咗，或者九種九牌棄局
+        # No more events belong to this seat: means this hand ended in
+        # tsumo, or a nine-terminals abort.
         for agari in self._agari_list():
             if agari.winner == seat and agari.is_tsumo:
                 return self._pick_type(actions, Tsumo)
         if isinstance(self.outcome, Ryuukyoku) and self.outcome.kind == "yao9":
             return self._pick_type(actions, NineTerminals)
-        raise OracleMismatch(f"SELF seat={seat} 揾唔到對應嘅歷史行為，下個 event={event!r}")
+        raise OracleMismatch(f"SELF seat={seat} found no matching historical action, next event={event!r}")
 
     def _match_self_kan(self, actions: list[Action], meld) -> Action:
         if meld.type is MeldType.ANKAN:
@@ -110,7 +118,7 @@ class HistoricalOracle:
             for action in actions:
                 if isinstance(action, AddedKan) and action.tile == meld.added:
                     return action
-        raise OracleMismatch(f"揾唔到啱嘅 kan action，meld={meld}, actions={actions}")
+        raise OracleMismatch(f"couldn't find a matching kan action, meld={meld}, actions={actions}")
 
     # --- DISCARD_REACTION ---
 
@@ -140,9 +148,9 @@ class HistoricalOracle:
         for action in actions:
             if isinstance(action, target_cls) and tuple(sorted(action.tiles)) == used_pair:
                 return action
-        raise OracleMismatch(f"揾唔到啱嘅 {target_cls.__name__}，used={used_pair}, actions={actions}")
+        raise OracleMismatch(f"couldn't find a matching {target_cls.__name__}, used={used_pair}, actions={actions}")
 
-    # --- ROBBED_KAN / NORTH_REACTION（未喺已知測試 round 出現過）---
+    # --- ROBBED_KAN / NORTH_REACTION (not yet seen in a known test round) ---
 
     def _decide_rob(self, seat: int, actions: list[Action]) -> Action:
         for agari in self._agari_list():
@@ -150,7 +158,7 @@ class HistoricalOracle:
                 return self._pick_type(actions, Ron)
         return self._pick_type(actions, Pass)
 
-    # --- TENPAI（流局公示聽牌，未測試過）---
+    # --- TENPAI (declared tenpai at an abortive draw, untested) ---
 
     def _decide_tenpai(self, seat: int, actions: list[Action]) -> Action:
         declare = (
@@ -161,4 +169,4 @@ class HistoricalOracle:
         for action in actions:
             if isinstance(action, DeclareTenpai) and action.declare == declare:
                 return action
-        raise OracleMismatch(f"揾唔到啱嘅 DeclareTenpai(declare={declare})，actions={actions}")
+        raise OracleMismatch(f"couldn't find a matching DeclareTenpai(declare={declare}), actions={actions}")

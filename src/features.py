@@ -1,19 +1,19 @@
-"""Step 4：將一個 FullDiscardState 編碼做 (C, 34) feature tensor。
+"""Step 4: encodes a FullDiscardState into a (C, 34) feature tensor.
 
-Channel 設計（32 planes，全部 binary 0/1）：
+Channel design (32 planes, all binary 0/1):
 
-  0-3   自己手牌 count thermometer（>=1 / >=2 / >=3 / >=4）
-  4     自己手牌入面有冇紅五
-  5-8   自己已 meld 嘅牌 count thermometer
-  9-12  自己（relative seat 0）牌河 count thermometer
-  13-16 下家（+1）牌河 count thermometer
-  17-20 對家（+2）牌河 count thermometer
-  21-24 上家（+3）牌河 count thermometer
-  25    現正生效嘅 dora 牌
-  26    場風（one-hot 落 27-30 嗰四欄）
-  27    自風
-  28    自己 riichi 咗未（broadcast）
-  29-31 下家/對家/上家 riichi 咗未（broadcast）
+  0-3   own hand count thermometer (>=1 / >=2 / >=3 / >=4)
+  4     whether own hand has a red five
+  5-8   own melded tiles count thermometer
+  9-12  own (relative seat 0) discard pile count thermometer
+  13-16 right (+1) discard pile count thermometer
+  17-20 across (+2) discard pile count thermometer
+  21-24 left (+3) discard pile count thermometer
+  25    currently active dora tile
+  26    round wind (one-hot into columns 27-30)
+  27    seat wind
+  28    own riichi status (broadcast)
+  29-31 right/across/left riichi status (broadcast)
 """
 
 import numpy as np
@@ -25,7 +25,7 @@ N_CHANNELS = 32
 
 
 def _thermometer(counts: list[int]) -> np.ndarray:
-    """count -> 4 個 binary planes：plane k 代表「呢隻牌至少有 k+1 隻」。"""
+    """count -> 4 binary planes: plane k means "this tile has at least k+1 copies"."""
     arr = np.asarray(counts, dtype=np.uint8)
     return np.stack([(arr >= k).astype(np.uint8) for k in (1, 2, 3, 4)])
 

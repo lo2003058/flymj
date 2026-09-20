@@ -1,10 +1,11 @@
-"""Scaling 實驗 Part 4：淨係 Arm A（真 connectome），train 喺大幾倍嘅 dataset
-（features_scaled.npz，10 年 ~1500萬 決策）度，5 個 seed，同原本
-experiment_results.csv 入面嗰 5 個 seed 嘅 Arm A（2009 年 3000 檔/155萬 決策）
-比較 test accuracy——答「多啲 training data 會唔會令呢個 model 叻啲」，同
-A vs B（連接圖案）嗰條問題係獨立嘅。
+"""Scaling experiment Part 4: trains only Arm A (real connectome) on the
+several-times-larger dataset (features_scaled.npz, 10 years / ~15.5M
+decisions), 5 seeds, and compares test accuracy against the 5 Arm A seeds
+already in experiment_results.csv (2009, 3000 files / 1.55M decisions) —
+answering "does more training data make this model better?", a question
+independent of A vs B (wiring pattern).
 
-跑法： uv run python src/train_scaling_experiment.py
+Run: uv run python src/train_scaling_experiment.py
 """
 
 import time
@@ -59,8 +60,9 @@ def save_all(results: list[dict], history: list[dict]) -> None:
 
 
 def permutation_test(a: np.ndarray, b: np.ndarray, seed: int = 0) -> float:
-    """雙尾 permutation test：a、b 嘅樣本隨機重新分組，睇原本嗰個平均數差有幾
-    極端。回傳 p value。"""
+    """Two-tailed permutation test: randomly reshuffles a and b's samples
+    into new groups, checking how extreme the original mean difference is.
+    Returns the p value."""
     rng = np.random.default_rng(seed)
     observed = abs(a.mean() - b.mean())
     pooled = np.concatenate([a, b])
@@ -90,14 +92,14 @@ def main() -> None:
 
     results, history = load_existing()
     done = {r["seed"] for r in results}
-    print(f"總共 {N_SEEDS} 個 run，已經跑完 {len(done)} 個")
+    print(f"{N_SEEDS} runs total, {len(done)} already completed")
 
     for seed in range(N_SEEDS):
         if seed in done:
-            print(f"跳過已跑完: seed={seed}")
+            print(f"Skipping already-completed: seed={seed}")
             continue
 
-        print(f"\n=== 訓練 arm=A（scaled dataset）seed={seed} ===")
+        print(f"\n=== Training arm=A (scaled dataset) seed={seed} ===")
         t0 = time.time()
         result = train_one_arm(
             "A", seed, masks, data, device, MAX_EPOCHS, BATCH_SIZE, LR, patience=PATIENCE, verbose_tag="A-scaled"
@@ -117,23 +119,23 @@ def main() -> None:
         for h in result["history"]:
             history.append({"seed": seed, **h})
 
-        print(f"seed={seed}: test_acc={result['test_acc']:.4f}  用時 {elapsed:.1f}s")
+        print(f"seed={seed}: test_acc={result['test_acc']:.4f}  took {elapsed:.1f}s")
         save_all(results, history)
 
     df = pl.DataFrame(results)
     scaled_acc = df["test_acc"].to_numpy()
-    print("\n=== Arm A，scaled dataset（10 年，5 seed）===")
+    print("\n=== Arm A, scaled dataset (10 years, 5 seeds) ===")
     print(f"mean={scaled_acc.mean():.4f}  std={scaled_acc.std(ddof=1):.4f}  "
           f"min={scaled_acc.min():.4f}  max={scaled_acc.max():.4f}")
 
     if not BASELINE_RESULTS_PATH.exists():
-        print(f"\n（搵唔到 {BASELINE_RESULTS_PATH}，冇得同原本 Arm A 比較）")
+        print(f"\n({BASELINE_RESULTS_PATH} not found, can't compare against the original Arm A)")
         return
 
     baseline_acc = (
         pl.read_csv(BASELINE_RESULTS_PATH).filter(pl.col("arm") == "A")["test_acc"].to_numpy()
     )
-    print("\n=== 對比：Arm A，原本 dataset（2009 年 3000 檔，5 seed）===")
+    print("\n=== Comparison: Arm A, original dataset (2009, 3000 files, 5 seeds) ===")
     print(f"mean={baseline_acc.mean():.4f}  std={baseline_acc.std(ddof=1):.4f}  "
           f"min={baseline_acc.min():.4f}  max={baseline_acc.max():.4f}")
 
@@ -142,12 +144,12 @@ def main() -> None:
     p_perm = permutation_test(scaled_acc, baseline_acc)
     d = cohens_d(scaled_acc, baseline_acc)
 
-    print(f"\n差距（scaled - 原本）= {diff_pp:+.2f} 個百分點")
-    print(f"Welch t = {t_stat:.2f}   p (t-test) = {p_ttest:.4f}   p (permutation, {N_PERMUTATIONS:,} 次) = {p_perm:.4f}")
+    print(f"\nDifference (scaled - original) = {diff_pp:+.2f} percentage points")
+    print(f"Welch t = {t_stat:.2f}   p (t-test) = {p_ttest:.4f}   p (permutation, {N_PERMUTATIONS:,} draws) = {p_perm:.4f}")
     print(f"Cohen's d = {d:.2f}")
 
-    print(f"\n已存 {RESULTS_PATH}")
-    print(f"已存 {HISTORY_PATH}")
+    print(f"\nSaved {RESULTS_PATH}")
+    print(f"Saved {HISTORY_PATH}")
 
 
 if __name__ == "__main__":

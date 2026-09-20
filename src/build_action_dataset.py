@@ -1,23 +1,27 @@
-"""Phase 2 Part 2：用已經驗證過嘅 wall reconstruction + oracle（見
-validate_replay.py），逐步重演歷史牌局，喺每一個 decision point 攞低：
-場面 feature、（jansou 算出嚟嘅）合法 action 種類、歷史實際揀咗邊種。
+"""Phase 2 Part 2: using the already-validated wall reconstruction +
+oracle (see validate_replay.py), replays historical matches step by step,
+recording at every decision point: the game-state features, the legal
+action types (as computed by jansou), and which one was actually chosen
+historically.
 
-同 Step 3/6 嘅 discard-only dataset 唔同，呢度連 pon/chii/kan/riichi/ron/pass
-呢啲決策都包埋，係 Phase 2「叫牌/立直」擴大嘅正式 dataset。
+Unlike the Step 3/6 discard-only dataset, this one also includes
+pon/chii/kan/riichi/ron/pass decisions — it's the official expanded
+Phase 2 "calls/riichi" dataset.
 
-輸出 data/processed/action_dataset.parquet：
+Writes data/processed/action_dataset.parquet:
   - match_id, kyoku_index, decision_index, seat, decision_kind
   - hand_counts, hand_red_counts, meld_counts, discard_counts, riichi,
-    dora_tiles, round_wind, seat_wind   （場面 feature，同 features.py 嘅
-    FullDiscardState 對齊，方便重用個 encode() function）
-  - trigger_seat, trigger_tile：DISCARD_REACTION 先有意義（-1 = 冇），
-    trigger_seat 係相對於揀緊呢個決策嘅 seat（0=自己/1=下家/2=對家/3=上家）
+    dora_tiles, round_wind, seat_wind   (game-state features, aligned with
+    features.py's FullDiscardState so the encode() function can be reused)
+  - trigger_seat, trigger_tile: only meaningful for DISCARD_REACTION
+    (-1 = none); trigger_seat is relative to the seat making this
+    decision (0=self/1=right/2=across/3=left)
   - action_type: DISCARD/RIICHI/TSUMO/KAN/KYUUSHU/PASS/PON/CHII/
     OPEN_KAN/RON/TENPAI_YES/TENPAI_NO
-  - tile: 0-33（淨係 DISCARD/RIICHI 有意義，其他 -1）
+  - tile: 0-33 (only meaningful for DISCARD/RIICHI, -1 otherwise)
   - split
 
-跑法： uv run python src/build_action_dataset.py
+Run: uv run python src/build_action_dataset.py
 """
 
 from pathlib import Path
@@ -51,7 +55,7 @@ YEAR = 2009
 PAIFU_DIR = Path(f"data/raw/paifu/{YEAR}")
 OUT_PATH = Path("data/processed/action_dataset.parquet")
 
-MAX_FILES = 3000  # 同 Step 6 discard-only dataset 一致嘅規模
+MAX_FILES = 3000  # matches the scale of the Step 6 discard-only dataset
 PASS_KEEP_RATE = 0.2
 PASS_SUBSAMPLE_SEED = 0
 
@@ -81,12 +85,13 @@ def categorize_action(action) -> tuple[str, int]:
         return "RON", -1
     if isinstance(action, DeclareTenpai):
         return ("TENPAI_YES" if action.declare else "TENPAI_NO"), -1
-    raise ValueError(f"未知 action type: {action!r}")
+    raise ValueError(f"Unknown action type: {action!r}")
 
 
 def snapshot_state(state: GameState, seat: int, player_count: int, *, is_reaction: bool) -> dict:
-    """由 jansou 自己權威嘅 GameState 攞返一個決策點嘅場面 feature，
-    唔使自己另外維護一份 tracker（依家個 GameState 已經驗證過準確）。"""
+    """Read a decision point's game-state features straight from jansou's
+    authoritative GameState, instead of maintaining our own separate
+    tracker (this GameState has already been validated as accurate)."""
     hand_counts = [0] * 34
     hand_red_counts = [0] * 34
     for tile in state.players[seat].as_hand(include_drawn=True).concealed:
@@ -108,14 +113,16 @@ def snapshot_state(state: GameState, seat: int, player_count: int, *, is_reactio
     dora_tiles = [indicator.kind.successor().value for indicator in state.wall.dora_indicators]
     seat_wind = (seat - state.dealer) % player_count
 
-    # DISCARD_REACTION 決策：而家反應緊邊個座位掉出嚟嘅邊隻牌（SELF 決策冇呢樣嘢）。
-    # 一定要用 is_reaction 呢個嚟自 point.kind 嘅明確 flag，唔可以淨係睇
-    # state.last_discard is not None——冇人叫嗰陣 flow.py 唔會清返呢個欄位，
-    # 留返上一鋪嘅殘值，會令 SELF 決策都誤判做「反應緊」。
+    # DISCARD_REACTION decision: which seat's discard, and which tile, is
+    # currently being reacted to (SELF decisions have none of this). Must
+    # use the explicit is_reaction flag derived from point.kind, not just
+    # check whether state.last_discard is not None — when nobody calls,
+    # flow.py doesn't clear that field, leaving a stale value from the
+    # previous turn that would incorrectly flag SELF decisions as reactions too.
     trigger_seat = -1
     trigger_tile = -1
     if is_reaction:
-        assert state.last_discard is not None, "DISCARD_REACTION 但 state.last_discard 係 None"
+        assert state.last_discard is not None, "DISCARD_REACTION but state.last_discard is None"
         discarder, tile = state.last_discard
         trigger_seat = (discarder - seat) % player_count
         trigger_tile = tile.kind.value
@@ -135,8 +142,9 @@ def snapshot_state(state: GameState, seat: int, player_count: int, *, is_reactio
 
 
 def process_round(round_log, player_count, rules, match_id: str, kyoku_index: int, split: str) -> list[dict] | None:
-    """回傳呢局全部決策嘅 row，如果 replay 中途對唔上就回傳 None（跳過成局，
-    唔留低部分/唔準確嘅 row）。"""
+    """Returns every row of decisions for this round, or None if the
+    replay diverges partway through (skip the whole round rather than
+    keeping partial/inaccurate rows)."""
     wall = reconstruct_wall(round_log, player_count)
     position = Position(dealer=round_log.dealer, round_wind=round_log.round_wind, round_number=1, honba=round_log.honba)
     state = new_deal(rules, wall, position, list(round_log.scores), round_log.riichi_sticks * RIICHI_DEPOSIT)
@@ -180,7 +188,7 @@ def process_round(round_log, player_count, rules, match_id: str, kyoku_index: in
 def main() -> None:
     all_files = sorted(PAIFU_DIR.glob("*.mjson"))
     files = all_files[:MAX_FILES]
-    print(f"處理 {len(files)} 個檔（MAX_FILES={MAX_FILES}）")
+    print(f"Processing {len(files)} files (MAX_FILES={MAX_FILES})")
 
     file_splits = assign_splits(len(files))
 
@@ -201,16 +209,16 @@ def main() -> None:
             all_rows.extend(rows)
 
         if (file_index + 1) % 100 == 0:
-            print(f"已處理 {file_index + 1}/{len(files)} 個檔，累積 {len(all_rows)} 個決策，跳過 {skipped_rounds} 局")
+            print(f"Processed {file_index + 1}/{len(files)} files, {len(all_rows)} decisions so far, {skipped_rounds} rounds skipped")
 
-    print(f"\n總共 {total_rounds} 局，跳過 {skipped_rounds} 局（{skipped_rounds / total_rounds:.2%}）")
-    print(f"總共 {len(all_rows)} 個決策")
+    print(f"\n{total_rounds} rounds total, {skipped_rounds} skipped ({skipped_rounds / total_rounds:.2%})")
+    print(f"{len(all_rows)} decisions total")
 
     df = pl.DataFrame(all_rows)
-    print("\n=== action_type 分佈（subsample 之前）===")
+    print("\n=== action_type distribution (before subsampling) ===")
     print(df.group_by("action_type").agg(pl.len().alias("count")).sort("count", descending=True))
 
-    print("\n=== decision_kind 分佈 ===")
+    print("\n=== decision_kind distribution ===")
     print(df.group_by("decision_kind").agg(pl.len().alias("count")).sort("count", descending=True))
 
     rng_seed = PASS_SUBSAMPLE_SEED
@@ -220,18 +228,18 @@ def main() -> None:
     other_df = df.filter(pl.col("action_type") != "PASS")
     df = pl.concat([other_df, pass_df]).sort(["match_id", "kyoku_index", "decision_index"])
 
-    print(f"\nPASS 由 {n_pass} 個 subsample 到 {n_keep_pass} 個（PASS_KEEP_RATE={PASS_KEEP_RATE}）")
-    print(f"Subsample 之後總共 {df.height} 個決策")
+    print(f"\nPASS subsampled from {n_pass} to {n_keep_pass} (PASS_KEEP_RATE={PASS_KEEP_RATE})")
+    print(f"Total decisions after subsampling: {df.height}")
 
-    print("\n=== action_type 分佈（subsample 之後）===")
+    print("\n=== action_type distribution (after subsampling) ===")
     print(df.group_by("action_type").agg(pl.len().alias("count")).sort("count", descending=True))
 
-    print("\n=== 決策數按 split ===")
+    print("\n=== decision count by split ===")
     print(df.group_by("split").agg(pl.len().alias("count")))
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     df.write_parquet(OUT_PATH)
-    print(f"\n已存 {OUT_PATH}")
+    print(f"\nSaved {OUT_PATH}")
 
 
 if __name__ == "__main__":

@@ -1,10 +1,11 @@
-"""Scaling 實驗 Part 3：對應 build_discard_dataset_scaled.py 嗰 10 年、~1500萬
-個決策砌 (C x 34) feature tensor——同 features.npz 係獨立嘅檔案，schema 一樣，
-但唔覆蓋原本嗰個（見 build_discard_dataset_scaled.py 嘅 docstring）。
+"""Scaling experiment Part 3: builds a (C x 34) feature tensor for the 10
+years / ~15.5M decisions in build_discard_dataset_scaled.py — a separate
+file from features.npz with the same schema, but not overwriting the
+original (see build_discard_dataset_scaled.py's docstring).
 
-輸出 data/processed/features_scaled.npz。
+Writes data/processed/features_scaled.npz.
 
-跑法： uv run python src/build_features_scaled.py
+Run: uv run python src/build_features_scaled.py
 """
 
 import numpy as np
@@ -28,7 +29,7 @@ def main() -> None:
     for year in YEARS:
         all_files = sorted(paifu_dir(year).glob("*.mjson"))
         files = all_files[:MAX_FILES_PER_YEAR]
-        print(f"\n=== {year} 年：處理 {len(files)} 個檔 ===")
+        print(f"\n=== {year}: processing {len(files)} files ===")
         file_splits = assign_splits(len(files))
 
         for file_index, path in enumerate(files):
@@ -43,7 +44,7 @@ def main() -> None:
                     tsumogiri_list.append(state.is_tsumogiri)
 
             if (file_index + 1) % 500 == 0:
-                print(f"  [{year}] 已處理 {file_index + 1}/{len(files)} 個檔，累積 {len(y_list)} 個樣本")
+                print(f"  [{year}] Processed {file_index + 1}/{len(files)} files, {len(y_list)} samples so far")
 
     x = np.stack(x_list).astype(np.uint8)
     y = np.array(y_list, dtype=np.uint8)
@@ -59,7 +60,7 @@ def main() -> None:
         print(f"split={s}: {(split_arr == s).sum():,}")
 
     np.savez_compressed(OUT_PATH, X=x, y=y, split=split_arr, is_riichi=is_riichi, is_tsumogiri=is_tsumogiri)
-    print(f"\n已存 {OUT_PATH}")
+    print(f"\nSaved {OUT_PATH}")
 
 
 if __name__ == "__main__":

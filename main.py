@@ -7,7 +7,8 @@ pl.Config.set_tbl_rows(40)
 
 tbl = feather.read_table("data/raw/annotations.feather")
 
-# 將 dictionary 欄解返做普通 string，避免 polars 轉換時再撞同一個問題
+# Decode dictionary-encoded columns back to plain strings, so polars
+# doesn't hit the same conversion issue again.
 cols = []
 for field in tbl.schema:
     col = tbl.column(field.name)
@@ -28,7 +29,7 @@ for c, d in zip(ann.columns, ann.dtypes):
 print("\n=== HEAD ===")
 print(ann.head(5))
 
-# 自動揾邊條欄裝住 cell type
+# Auto-detect which column holds the cell type
 for col in ann.columns:
     if ann[col].dtype != pl.String:
         continue
@@ -37,7 +38,7 @@ for col in ann.columns:
         continue
     hits = vals.str.starts_with("KC").sum()
     if hits > 0:
-        print(f"\n=== 欄位 '{col}' 有 {hits} 行以 KC 開頭 ===")
+        print(f"\n=== column '{col}' has {hits} rows starting with KC ===")
         print(
             ann.filter(pl.col(col).str.starts_with("KC"))
             .get_column(col)

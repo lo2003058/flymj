@@ -1,17 +1,21 @@
-"""Step 7：跑全套 3 arm x N seed 嘅 supervised training 實驗。
+"""Step 7: runs the full 3-arm x N-seed supervised training experiment.
 
-  Arm A: seed 0-4  （5 個 run，個 mask 淨係一條真嘅，5 個 run 淨係
-         model init/data order 唔同）
-  Arm B: seed 0-19 （20 個 run，每個 seed 用返 masks.npz 入面對應嗰條
-         degree-matched random mask，同一個 seed 亦都攞嚟做 model
-         init/data order，等 A/B 之間淨係 mask identity 呢個變數唔同）
-  Arm C: seed 0-4  （5 個 run，dense、hidden dim 夾返 Arm A 有效參數量）
+  Arm A: seeds 0-4  (5 runs; there's only one real mask, so these 5 runs
+         only vary model init/data order)
+  Arm B: seeds 0-19 (20 runs; each seed uses the matching degree-matched
+         random mask in masks.npz, and that same seed also drives model
+         init/data order, so mask identity is the only variable that
+         differs between A and B)
+  Arm C: seeds 0-4  (5 runs; dense, hidden dim matched to Arm A's
+         effective parameter count)
 
-每個 run 訓練完即刻將全部（包括之前已經跑完嘅）結果重新存過 csv/parquet，
-就算中途斷咗都唔會冚晒之前啲已經跑完嘅 run（30 行數據，全部 rewrite 都好平）。
-再跑呢個 script 會跳過已經喺 experiment_results.csv 度嘅 (arm, seed)。
+After every run, all results (including previously completed ones) are
+immediately rewritten to csv/parquet, so an interruption never loses
+already-completed runs (30 rows of data, so a full rewrite is cheap).
+Re-running this script skips any (arm, seed) already in
+experiment_results.csv.
 
-跑法： uv run python src/run_experiment.py
+Run: uv run python src/run_experiment.py
 """
 
 import time
@@ -82,14 +86,14 @@ def main() -> None:
     plan = run_plan()
     results, history = load_existing()
     done = {(r["arm"], r["seed"]) for r in results}
-    print(f"總共 {len(plan)} 個 run，已經跑完 {len(done)} 個")
+    print(f"{len(plan)} runs total, {len(done)} already completed")
 
     for arm, seed in plan:
         if (arm, seed) in done:
-            print(f"跳過已跑完: arm={arm} seed={seed}")
+            print(f"Skipping already-completed: arm={arm} seed={seed}")
             continue
 
-        print(f"\n=== 訓練 arm={arm} seed={seed} ===")
+        print(f"\n=== Training arm={arm} seed={seed} ===")
         t0 = time.time()
         result = train_one_arm(arm, seed, masks, data, device, MAX_EPOCHS, BATCH_SIZE, LR, patience=PATIENCE)
         elapsed = time.time() - t0
@@ -108,10 +112,10 @@ def main() -> None:
         for h in result["history"]:
             history.append({"arm": arm, "seed": seed, **h})
 
-        print(f"arm={arm} seed={seed}: test_acc={result['test_acc']:.4f}  用時 {elapsed:.1f}s")
+        print(f"arm={arm} seed={seed}: test_acc={result['test_acc']:.4f}  took {elapsed:.1f}s")
         save_all(results, history)
 
-    print("\n=== 全部 run 完成，總結（按 arm 平均）===")
+    print("\n=== All runs complete, summary (mean by arm) ===")
     df = pl.DataFrame(results)
     print(df.group_by("arm").agg(
         pl.len().alias("n_runs"),
@@ -120,8 +124,8 @@ def main() -> None:
         pl.col("test_acc").min().alias("test_acc_min"),
         pl.col("test_acc").max().alias("test_acc_max"),
     ).sort("arm"))
-    print(f"\n已存 {RESULTS_PATH}")
-    print(f"已存 {HISTORY_PATH}")
+    print(f"\nSaved {RESULTS_PATH}")
+    print(f"Saved {HISTORY_PATH}")
 
 
 if __name__ == "__main__":

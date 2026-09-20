@@ -1,21 +1,23 @@
-"""34 隻麻雀牌 index (0-33) <-> Unicode 麻雀牌符號 / 短文字標籤。
+"""Maps the 34 mahjong tile indices (0-33) <-> Unicode mahjong tile glyphs /
+short text labels.
 
-TileKind 次序：0-8 萬(m)，9-17 筒(p)，18-26 索(s)，27-33 東南西北白發中。
-Unicode「Mahjong Tiles」block 次序唔一樣（先風牌/三元牌，再萬，再索，再筒），
-要逐段對返。
+TileKind order: 0-8 man, 9-17 pin, 18-26 sou, 27-33 East/South/West/North/
+White/Green/Red. The Unicode "Mahjong Tiles" block orders things
+differently (winds/dragons first, then man, then sou, then pin), so each
+range has to be mapped separately.
 """
 
-_MAN_BASE = 0x1F007  # 0x1F007..0x1F00F = 1-9 萬
-_PIN_BASE = 0x1F019  # 0x1F019..0x1F021 = 1-9 筒
-_SOU_BASE = 0x1F010  # 0x1F010..0x1F018 = 1-9 索
+_MAN_BASE = 0x1F007  # 0x1F007..0x1F00F = man 1-9
+_PIN_BASE = 0x1F019  # 0x1F019..0x1F021 = pin 1-9
+_SOU_BASE = 0x1F010  # 0x1F010..0x1F018 = sou 1-9
 _HONOR_CODEPOINTS = {
-    27: 0x1F000,  # 東
-    28: 0x1F001,  # 南
-    29: 0x1F002,  # 西
-    30: 0x1F003,  # 北
-    31: 0x1F006,  # 白
-    32: 0x1F005,  # 發
-    33: 0x1F004,  # 中
+    27: 0x1F000,  # East
+    28: 0x1F001,  # South
+    29: 0x1F002,  # West
+    30: 0x1F003,  # North
+    31: 0x1F006,  # White dragon
+    32: 0x1F005,  # Green dragon
+    33: 0x1F004,  # Red dragon
 }
 _HONOR_LABELS = {27: "東", 28: "南", 29: "西", 30: "北", 31: "白", 32: "發", 33: "中"}
 
@@ -31,7 +33,7 @@ def tile_glyph(kind: int) -> str:
 
 
 def tile_label(kind: int) -> str:
-    """人類睇得明嘅牌名（唔用 m/p/s 呢種簡寫）。"""
+    """Human-readable tile name (not the m/p/s shorthand)."""
     if 0 <= kind <= 8:
         return f"{kind + 1}萬"
     if 9 <= kind <= 17:
@@ -44,6 +46,7 @@ def tile_label(kind: int) -> str:
 TILE_GLYPHS = [tile_glyph(k) for k in range(34)]
 TILE_LABELS = [tile_label(k) for k in range(34)]
 
-#: 邊幾個 index 係「5」，先可以俾紅五 checkbox 用（呢度嘅 "m"/"p"/"s" 淨係
-#: 內部 key，唔會顯示俾使用者睇，顯示嗰陣用 tile_label()/TILE_LABELS）。
+#: Which indices are a "5", for the red-five checkbox. The "m"/"p"/"s"
+#: here are just internal keys, never shown to the user — display uses
+#: tile_label()/TILE_LABELS instead.
 FIVE_KINDS = {4: "m", 13: "p", 22: "s"}

@@ -1,19 +1,21 @@
-"""Phase 2 Part 4：支援 discard/riichi/tsumo/kan/kyuushu（SELF 決策）同
-pass/pon/chii/openkan/ron（DISCARD_REACTION 決策）嘅 multi-head 架構。
+"""Phase 2 Part 4: a multi-head architecture covering discard/riichi/tsumo/
+kan/kyuushu (SELF decisions) and pass/pon/chii/openkan/ron (DISCARD_REACTION
+decisions).
 
-  麻雀 feature (34 x 34)
-    -> Conv1d 前端
-    -> Linear -> PN 層
+  mahjong feature (34 x 34)
+    -> Conv1d front-end
+    -> Linear -> PN layer
     -> MaskedLinear(PN -> KC)
     -> ReLU
     -> MaskedLinear(KC -> MBON)
-    -> 三個頭：
-         discard_head  (34)                 揀邊隻牌（DISCARD/RIICHI 共用）
-         self_type_head (len(SELF_ACTION_TYPES))    SELF 決策揀邊種 action
-         reaction_head  (len(REACTION_ACTION_TYPES)) REACTION 決策揀邊種 action
+    -> three heads:
+         discard_head  (34)                          which tile (shared by DISCARD/RIICHI)
+         self_type_head (len(SELF_ACTION_TYPES))      which action for a SELF decision
+         reaction_head  (len(REACTION_ACTION_TYPES))  which action for a REACTION decision
 
-中間兩層(PN->KC->MBON)保留返 connectome mask——呢個先係成個 project 嘅重點，
-加落去嘅頭淨係決定「用邊種輸出空間」，唔改動個 mask 本身。
+The two hidden layers (PN->KC->MBON) keep the connectome mask — that's
+still the whole point of the project. The heads added on top just decide
+"which output space to use," without touching the mask itself.
 """
 
 import torch
@@ -39,7 +41,7 @@ class ActionNet(nn.Module):
         n_kc, n_pn = mask_pn_kc.shape
         n_mbon, n_kc2 = mask_kc_mbon.shape
         if n_kc != n_kc2:
-            raise ValueError(f"mask_pn_kc 嘅 KC 維度 {n_kc} 同 mask_kc_mbon 嘅 KC 維度 {n_kc2} 唔夾")
+            raise ValueError(f"mask_pn_kc's KC dimension {n_kc} doesn't match mask_kc_mbon's KC dimension {n_kc2}")
 
         self.conv = nn.Sequential(
             nn.Conv1d(n_channels, conv_channels, kernel_size=3, padding=1),

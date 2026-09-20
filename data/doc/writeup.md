@@ -176,11 +176,12 @@ Arm A（真 connectome），5 個 seed，同原本 experiment_results.csv 入面
 「起跑點」，但 data 規模先係真正嘅樽頸——同深度學習領域嘅一般認知一致，
 但透過呢個乾淨嘅對照實驗喺呢個特定 task 上親身驗證咗一次。
 
-跑法/產出見下面「檔案索引」入面 `*_scaled` 果幾行；`data/processed/model_arm_a.pt`
-（俾兩個本機 app 用嗰個部署 checkpoint）已經改用呢個 scaled dataset 重新
-train 過。
+跑法/產出見下面「檔案索引」入面 `*_scaled` 果幾行。（呢個 discard-only
+Arm A model 曾經有個部署用嘅 checkpoint `model_arm_a.pt`，俾一個獨立嘅
+「單一決策分析器」app 用；嗰個 app 同呢個 checkpoint 之後決定唔要，見
+下面「已移除」一節。）
 
-**Action model 都做埋一次**：`game_app.py`（成局遊戲）同 `app.py` 嘅
+**Action model 都做埋一次**：`game_app.py`（成局遊戲）嘅
 叫牌/立直/自摸/防守建議，用緊嘅其實係另一個 model
 （`action_model_arm_a.pt`），訓練資料同上面嗰個純掉牌 dataset 唔同（連
 pon/chii/kan/riichi/ron/pass 都有）。用同一批 2009-2018 牌譜，經
@@ -207,6 +208,19 @@ Python dict 砌成一個 polars DataFrame，會將成個 dataset 喺記憶體度
 兩次。修正做法：（1）逐年分開砌、逐年即刻寫落 disk 做 cache（令個 script
 可以斷咗續返，唔使由頭嚟過），（2）最後 subsample 嗰步用 numpy 揀 index
 再一次過 filter，唔好分開 filter 兩份再 concat 再 sort。
+
+## 已移除：單一決策分析器（`app.py`）
+
+Phase 1/2 曾經有個獨立嘅「單一決策分析器」Streamlit app（`src/app.py`，
+淨係俾一手牌 + 場況、睇 model 點排名各個選項），用嗰陣要另外部署一個
+discard-only 嘅 checkpoint（`train_and_save_model.py` → `model_arm_a.pt`）。
+之後決定淨係保留 `game_app.py`（可以真係打落去嘅遊戲），單一決策分析器
+用途重疊、冧多咗，所以移除埋 `app.py`、`inference.py`（佢專用嘅 model
+wrapper）、`call_options.py`（佢專用嘅手動 pon/chii/kan 組合枚舉，
+`game_app.py` 用緊 `jansou` 真正嘅合法選項，唔需要呢個）同
+`train_and_save_model.py`/`model_arm_a.pt`。經過核對，呢幾個檔案冇被
+`game_app.py` 或者其他 pipeline script 用過，移除唔影響任何研究結果
+（A/B/C 對照、scaling 實驗都唔靠呢個 checkpoint）。
 
 ## 限制
 
@@ -248,7 +262,6 @@ Python dict 砌成一個 polars DataFrame，會將成個 dataset 喺記憶體度
 | `src/pilot_compare.py` | Pilot（1 A + 1 B） | 7 |
 | `src/run_experiment.py` | 全套 30 run，`data/processed/experiment_results.csv`/`experiment_history.parquet` | 7 |
 | `src/plot_experiment.py` | `artifacts/arm_comparison.png` | 8 |
-| `src/train_and_save_model.py` | `data/processed/model_arm_a.pt`（部署用，已改用 scaled dataset） | 8/app |
 | `src/download_paifu_years.py` | 落 2010-2018 牌譜（Follow-up） | scaling |
 | `src/build_discard_dataset_scaled.py` | `data/processed/discard_dataset_scaled.parquet`（10 年） | scaling |
 | `src/build_features_scaled.py` | `data/processed/features_scaled.npz`（10 年） | scaling |

@@ -1,5 +1,6 @@
-"""每個 match（一個 .mjson 檔案 = 一場 hanchan）分去 train/val/test 其中一邊，
-唔可以將同一場牌局嘅決策撕開兩份（會漏料——同一局入面嘅決策高度相關）。
+"""Assigns each match (one .mjson file = one hanchan) to train/val/test —
+never splitting a single match's decisions across two sides (that would
+leak information, since decisions within one match are highly correlated).
 """
 
 import numpy as np
@@ -7,13 +8,13 @@ import numpy as np
 SPLIT_SEED = 42
 TRAIN_FRAC = 0.8
 VAL_FRAC = 0.1
-# test 攞返剩低嗰啲
+# test gets whatever's left
 
 
 def assign_splits(n_files: int) -> np.ndarray:
-    """回傳 length n_files 嘅 array，值係 'train'/'val'/'test'。
+    """Returns an array of length n_files, valued 'train'/'val'/'test'.
 
-    Index 對應嗰個 match 喺 sorted(glob) 入面嘅次序（即係 files[i]）。
+    Index corresponds to that match's position in sorted(glob) (i.e. files[i]).
     """
     rng = np.random.default_rng(SPLIT_SEED)
     order = rng.permutation(n_files)

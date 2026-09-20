@@ -59,34 +59,18 @@ and just train it on 10x more data (2009-2018, ~15.5M decisions instead of
 **+3.99 points**, Welch t=58.16 (p≈0), permutation test p=0.0024, Cohen's
 d=36.78 — an order of magnitude larger effect than any wiring comparison
 above. At this task, dataset scale matters far more than which sparse
-wiring pattern is used. The deployed `model_arm_a.pt` checkpoint now uses
-this scaled dataset. Full details in the "Follow-up 實驗：Dataset Scaling"
-section of [`data/doc/writeup.md`](data/doc/writeup.md).
+wiring pattern is used. Full details in the "Follow-up 實驗：Dataset
+Scaling" section of [`data/doc/writeup.md`](data/doc/writeup.md).
 
-The deployed `action_model_arm_a.pt` (the multi-head model both apps
-actually use for calls/riichi/tsumo/defense — `game_app.py`'s live game
-runs on this one, not `model_arm_a.pt` above) was retrained the same way,
-on 17.07M action decisions from the same 10 years: **overall test accuracy
-84.10%** (self_type 98.74%, discard 68.93%, reaction 88.22%).
+The deployed `action_model_arm_a.pt` (the multi-head model the playable
+game actually uses for calls/riichi/tsumo/defense) was retrained the same
+way, on 17.07M action decisions from the same 10 years: **overall test
+accuracy 84.10%** (self_type 98.74%, discard 68.93%, reaction 88.22%).
 
-## Two playable apps
+## Play it
 
-The Arm A (real connectome) model is wrapped into two local Streamlit apps:
-
-### 1. Single-decision analyzer (`src/app.py`)
-
-Give it a hand + game situation, pick the exact scenario you want to ask
-about, and see how the model ranks each option (which tile to discard, win,
-pon, chii, riichi, ...), plus a 3D visualization of which PN/KC/MBON neurons
-are "firing" hardest. Includes a basic genbutsu (safe-tile) defense hint.
-
-```bash
-uv run streamlit run src/app.py
-```
-
-### 2. A full, continuous mahjong table (`src/game_app.py`)
-
-An actual game: you (seat 0) vs. three `jansou`-provided
+The Arm A (real connectome) model is wrapped into a local Streamlit app —
+an actual game: you (seat 0) vs. three `jansou`-provided
 `SmartEfficiencyAgent` bots. A full east+south round with dealer rotation
 and scoring, all driven by `jansou.game.environment.Environment` — not a
 hand-rolled fake engine. On your turn, just tap the tile in your hand to
@@ -115,9 +99,8 @@ is gitignored and needs to be regenerated locally:
 | 4 | `src/build_features.py` | `data/processed/features.npz` | the two above |
 | 5–7 | `src/run_experiment.py` | `data/processed/experiment_results.csv` | 30 runs (arms A/B/C) |
 | 8 | `src/plot_experiment.py` | `artifacts/arm_comparison.png` | the results above |
-| — | `src/train_and_save_model.py` | `data/processed/model_arm_a.pt` (used by `app.py`) | masks + features |
 | — | `src/validate_replay.py` | validates the `jansou` replay engine reproduces historical logs 100% | mahjong logs |
-| — | `src/build_action_dataset.py` → `build_action_features.py` → `train_action_model.py` | `data/processed/action_model_arm_a.pt` (both apps use this for call/riichi/tsumo/defense suggestions) | mahjong logs + masks |
+| — | `src/build_action_dataset.py` → `build_action_features.py` → `train_action_model.py` | `data/processed/action_model_arm_a.pt` (the playable game uses this for call/riichi/tsumo/defense suggestions) | mahjong logs + masks |
 | — | `src/download_paifu_years.py` → `build_discard_dataset_scaled.py` → `build_features_scaled.py` → `train_scaling_experiment.py` | `data/processed/scaling_results.csv` (the dataset-scaling follow-up above) | 2010–2018 mahjong logs |
 | — | `src/build_action_dataset_scaled.py` → `build_action_features_scaled.py` → `train_action_model.py` | `data/processed/action_model_arm_a.pt`, retrained on the scaled 10-year dataset | 2010–2018 mahjong logs + masks |
 

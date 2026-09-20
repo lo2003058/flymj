@@ -1,15 +1,18 @@
-"""Scaling 實驗 Part 2：由 2009+2010-2018 共 10 年嘅牌譜砌一個大幾倍嘅掉牌
-決策 dataset，用嚟答「多啲 training data 會唔會令真 connectome（Arm A）model
-打得叻啲」——同 writeup.md 已經完成嘅 A/B/C 拓撲對照實驗係兩件唔同嘅事，所以
-特登用獨立檔名（*_scaled），唔會覆蓋原本嗰 3000 檔/155 萬決策嘅 dataset，
-同埋建基於佢嘅 experiment_results.csv 結果。
+"""Scaling experiment Part 2: builds a several-times-larger discard-
+decision dataset from 10 years of logs (2009+2010-2018), used to answer
+"does more training data make the real connectome (Arm A) model better?"
+— a separate question from the A/B/C wiring-topology comparison already
+completed in writeup.md, so this deliberately uses a separate filename
+(*_scaled) rather than overwriting the original 3000-file/1.55M-decision
+dataset that experiment_results.csv is based on.
 
-每年攞同一個 MAX_FILES_PER_YEAR（3000，同原本單一年嗰陣一樣），10 年一齊
-夾埋落，等每一年喺 train/val/test 都有平均代表性（唔會出現「淨係用舊年代
-train、新年代 test」呢種 meta drift 嘅隱藏 leakage）。
+Each year uses the same MAX_FILES_PER_YEAR (3000, same as the original
+single-year run), with all 10 years combined so every year has even
+representation across train/val/test (avoiding a hidden meta-drift leak
+where old eras are only in train and new eras only in test).
 
-跑法：
-  1. uv run python src/download_paifu_years.py   （落 2010-2018；2009 應該已經有）
+Run:
+  1. uv run python src/download_paifu_years.py   (downloads 2010-2018; 2009 should already exist)
   2. uv run python src/build_discard_dataset_scaled.py
 """
 
@@ -64,7 +67,7 @@ def build_rows_for_year(year: int, files: list[Path], file_splits) -> list[dict]
                 )
 
         if (file_index + 1) % 500 == 0:
-            print(f"  [{year}] 已處理 {file_index + 1}/{len(files)} 個檔，累積 {len(rows)} 個決策")
+            print(f"  [{year}] Processed {file_index + 1}/{len(files)} files, {len(rows)} decisions so far")
 
     return rows
 
@@ -76,40 +79,40 @@ def main() -> None:
         d = paifu_dir(year)
         all_files = sorted(d.glob("*.mjson"))
         if not all_files:
-            raise SystemExit(f"{d} 搵唔到已落嘅牌譜，先跑 src/download_paifu_years.py")
+            raise SystemExit(f"No downloaded logs found in {d}, run src/download_paifu_years.py first")
         files = all_files[:MAX_FILES_PER_YEAR]
-        print(f"\n=== {year} 年：{d} 總共 {len(all_files)} 個檔，呢次用頭 {len(files)} 個 ===")
+        print(f"\n=== {year}: {d} has {len(all_files)} files total, using the first {len(files)} this run ===")
 
         file_splits = assign_splits(len(files))
         rows = build_rows_for_year(year, files, file_splits)
-        print(f"{year} 年：{len(rows)} 個決策，嚟自 {len(files)} 個檔")
+        print(f"{year}: {len(rows)} decisions, from {len(files)} files")
         all_rows.extend(rows)
 
-    print(f"\n總共 {len(all_rows)} 個掉牌決策，嚟自 {len(YEARS)} 個年份")
+    print(f"\n{len(all_rows)} discard decisions total, from {len(YEARS)} years")
 
     df = pl.DataFrame(all_rows)
     print("\n=== dataset schema ===")
     print(df.schema)
 
-    print("\n=== decision 數按年份 ===")
+    print("\n=== decision count by year ===")
     print(df.group_by("year").agg(pl.len().alias("count")).sort("year"))
 
-    print("\n=== decision 數按 split ===")
+    print("\n=== decision count by split ===")
     print(df.group_by("split").agg(pl.len().alias("count")))
 
-    print("\n=== 手牌大細 sanity check（hand_size == 14 - 3*n_melds）===")
+    print("\n=== hand size sanity check (hand_size == 14 - 3*n_melds) ===")
     df_check = df.with_columns(
         hand_size=pl.col("hand_counts").list.sum(),
         expected=14 - 3 * pl.col("n_melds"),
     )
     bad = df_check.filter(pl.col("hand_size") != pl.col("expected"))
     if bad.height:
-        raise AssertionError(f"{bad.height} 行 hand_size != 14 - 3*n_melds，replay 邏輯有 bug")
-    print("全部一致：hand_size == 14 - 3*n_melds")
+        raise AssertionError(f"{bad.height} rows have hand_size != 14 - 3*n_melds, the replay logic has a bug")
+    print("All consistent: hand_size == 14 - 3*n_melds")
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     df.write_parquet(OUT_PATH)
-    print(f"\n已存 {OUT_PATH}")
+    print(f"\nSaved {OUT_PATH}")
 
 
 if __name__ == "__main__":

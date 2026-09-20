@@ -1,12 +1,14 @@
-"""Phase 2 Part 4：訓練 multi-head ActionNet（Arm A：真 connectome mask）。
+"""Phase 2 Part 4: trains the multi-head ActionNet (Arm A: real connectome mask).
 
-用 action_features_scaled.npz（2009-2018 十年，見 build_action_dataset_scaled.py
-/build_action_features_scaled.py）訓練，唔再用原本嗰 2009 年單年版本——
-train_scaling_experiment.py 已經證實過同一批擴大嘅牌譜可以將純掉牌 model
-嘅 test accuracy 由 65.7% 谷到 69.7%，冇理由呢個部署緊、game_app.py 實際
-用嚟做叫牌/立直/自摸/防守建議嘅 model 淨係用返細嗰份 dataset。
+Trains on action_features_scaled.npz (2009-2018, ten years — see
+build_action_dataset_scaled.py / build_action_features_scaled.py) rather
+than the original single-year 2009 version — train_scaling_experiment.py
+already showed that the same scaled logs can push the discard-only
+model's test accuracy from 65.7% to 69.7%, so there's no reason for this
+deployed model (which the game actually uses for call/riichi/tsumo/
+defense suggestions) to stick with the smaller dataset.
 
-跑法： uv run python src/train_action_model.py
+Run: uv run python src/train_action_model.py
 """
 
 import numpy as np
@@ -111,7 +113,7 @@ def main() -> None:
     for split in ("train", "val", "test"):
         m = split_full == split
         data[split] = (x_full[m], self_type_full[m], discard_tile_full[m], reaction_full[m])
-        print(f"{split}: {int(m.sum())} 行")
+        print(f"{split}: {int(m.sum())} rows")
 
     torch.manual_seed(SEED)
     mask_pn_kc = torch.tensor(masks["mask_pn_kc_real"], dtype=torch.float32, device=device)
@@ -120,7 +122,7 @@ def main() -> None:
     n_channels, n_tiles = x_full.shape[1], x_full.shape[2]
     model = ActionNet(n_channels, n_tiles, mask_pn_kc, mask_kc_mbon).to(device)
     n_params = sum(p.numel() for p in model.parameters())
-    print(f"model 參數量: {n_params:,}")
+    print(f"model parameter count: {n_params:,}")
 
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
     loss_fn = nn.CrossEntropyLoss()
@@ -163,13 +165,13 @@ def main() -> None:
         else:
             bad_epochs += 1
             if bad_epochs >= PATIENCE:
-                print(f"early stop at epoch {epoch + 1}（best val_overall={best_val:.4f} @ epoch {best_epoch + 1}）")
+                print(f"early stop at epoch {epoch + 1} (best val_overall={best_val:.4f} @ epoch {best_epoch + 1})")
                 break
 
     model.load_state_dict(best_state)
     test_accs, test_overall = evaluate(model, *data["test"], device, BATCH_SIZE)
     print(
-        f"\n最終 test accuracy: self_type={test_accs['self_type']:.4f} discard={test_accs['discard']:.4f} "
+        f"\nFinal test accuracy: self_type={test_accs['self_type']:.4f} discard={test_accs['discard']:.4f} "
         f"reaction={test_accs['reaction']:.4f} overall={test_overall:.4f}"
     )
 
@@ -177,7 +179,7 @@ def main() -> None:
         {"model_state": model.state_dict(), "n_channels": n_channels, "n_tiles": n_tiles},
         OUT_PATH,
     )
-    print(f"已存 {OUT_PATH}")
+    print(f"Saved {OUT_PATH}")
 
 
 if __name__ == "__main__":

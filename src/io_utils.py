@@ -4,12 +4,13 @@ import pyarrow.feather as feather
 
 
 def load_feather(path: str) -> pl.DataFrame:
-    """讀 annotations.feather / edges.feather。
+    """Read annotations.feather / edges.feather.
 
-    polars 嘅 pl.read_ipc() 讀呢批檔會拋
-    `ComputeError: The dictionary key must fit in a usize, but -1 does not`，
-    因為檔案有 dictionary-encoded 欄用 -1 表示 null。
-    呢個 loader 先用 pyarrow 讀，將 dictionary 欄解返做普通欄先轉去 polars。
+    polars' `pl.read_ipc()` raises
+    `ComputeError: The dictionary key must fit in a usize, but -1 does not`
+    on these files, because they have dictionary-encoded columns that use
+    -1 to represent null. This loader reads via pyarrow first, decoding
+    dictionary columns back to plain columns before handing off to polars.
     """
     tbl = feather.read_table(path)
     cols = []

@@ -1,11 +1,14 @@
-"""Phase 3 Part 1：包住 jansou.game.environment.Environment 嘅 generator。
+"""Phase 3 Part 1: wraps the jansou.game.environment.Environment generator.
 
-Seat 0 係人類，佢嘅回合停低等 UI 攞返個選擇；seat 1-3 用
-`SmartEfficiencyAgent`（jansou 自帶，識叫牌、識用 shanten/acceptance 揀
-discard，唔係亂咁打）自動即刻解決。
+Seat 0 is the human; their turn pauses to wait for the UI to pass back a
+choice. Seats 1-3 use `SmartEfficiencyAgent` (jansou's built-in agent —
+calls, riichis, and picks discards using shanten/acceptance, not randomly)
+and resolve immediately on their own.
 
-成鋪(東南各四局)由 Environment.play() 自己一路行落去，直到成場完
-（GameResult）先停，中間唔使我哋自己管 dealer 輪替/計分。
+The full match (four east + four south rounds) is driven by
+`Environment.play()` itself, which only stops once the whole match ends
+(a GameResult) — we don't have to manage dealer rotation or scoring
+ourselves in between.
 """
 
 from dataclasses import dataclass, field
@@ -15,32 +18,108 @@ from jansou.game.actions import Action
 from jansou.game.agents import SmartEfficiencyAgent
 from jansou.game.environment import DecisionRequest, Environment, GameResult
 from jansou.game.events import Discard, Event, IndicatorReveal, RiichiAccepted, Ryuukyoku, ScoreChange, Win
+from jansou.scoring.score import LimitTier
 
 HUMAN_SEAT = 0
 
+#: Proper display names for jansou's Yaku enum, cross-checked against the
+#: full yaku list (https://zh.wikipedia.org/wiki/日本麻將的和牌牌型列表) —
+#: naive title-casing of the enum name alone produces awkward results like
+#: "Yakuhai Haku" instead of "Yakuhai (White Dragon)".
+_YAKU_LABELS: dict[str, str] = {
+    "RIICHI": "Riichi",
+    "IPPATSU": "Ippatsu",
+    "MENZEN_TSUMO": "Menzen Tsumo",
+    "PINFU": "Pinfu",
+    "IIPEIKOU": "Iipeikou",
+    "TANYAO": "Tanyao",
+    "YAKUHAI_HAKU": "Yakuhai (White Dragon)",
+    "YAKUHAI_HATSU": "Yakuhai (Green Dragon)",
+    "YAKUHAI_CHUN": "Yakuhai (Red Dragon)",
+    "YAKUHAI_ROUND": "Yakuhai (Round Wind)",
+    "YAKUHAI_SEAT": "Yakuhai (Seat Wind)",
+    "HAITEI": "Haitei Raoyue",
+    "HOUTEI": "Houtei Raoyui",
+    "RINSHAN": "Rinshan Kaihou",
+    "CHANKAN": "Chankan",
+    "DOUBLE_RIICHI": "Double Riichi",
+    "CHIITOITSU": "Chiitoitsu",
+    "SANSHOKU_DOUJUN": "Sanshoku Doujun",
+    "ITTSU": "Ittsu",
+    "CHANTA": "Chanta",
+    "TOITOI": "Toitoi",
+    "SANANKOU": "Sanankou",
+    "SANSHOKU_DOUKOU": "Sanshoku Doukou",
+    "SANKANTSU": "Sankantsu",
+    "SHOUSANGEN": "Shousangen",
+    "HONROUTOU": "Honroutou",
+    "HONITSU": "Honitsu",
+    "JUNCHAN": "Junchan",
+    "RYANPEIKOU": "Ryanpeikou",
+    "CHINITSU": "Chinitsu",
+    "KOKUSHI": "Kokushi Musou",
+    "SUUANKOU": "Suuankou",
+    "CHUUREN": "Chuuren Poutou",
+    "DAISANGEN": "Daisangen",
+    "SHOUSUUSHI": "Shousuushi",
+    "DAISUUSHI": "Daisuushi",
+    "TSUUIISOU": "Tsuuiisou",
+    "CHINROUTOU": "Chinroutou",
+    "RYUUIISOU": "Ryuuiisou",
+    "SUUKANTSU": "Suukantsu",
+    "TENHOU": "Tenhou",
+    "CHIIHOU": "Chiihou",
+}
+
+
+def _yaku_label(name: str) -> str:
+    return _YAKU_LABELS.get(name, name.replace("_", " ").title())
+
+
+def _win_text(event: Win, tile_label) -> str:
+    """A detailed win summary: how it was won, on which tile, every yaku
+    that scored, the han/fu (or yakuman status), and the points gained —
+    the hand-summary screen used to only show the han/fu total, which
+    wasn't enough to understand what actually happened."""
+    source = "tsumo" if event.from_seat is None else f"ron off seat {event.from_seat}"
+    tile = tile_label(event.winning_tile.kind.value)
+    r = event.result
+
+    if r.is_yakuman:
+        yaku_str = ", ".join(
+            f"{_yaku_label(yv.yaku.name)}" + (f" x{yv.value}" if yv.value > 1 else "")
+            for yv in r.yaku
+        )
+        value_str = f"Yakuman — {yaku_str}"
+    else:
+        yaku_str = ", ".join(f"{_yaku_label(yv.yaku.name)} ({yv.value})" for yv in r.yaku)
+        limit_str = f" — {_yaku_label(r.limit.name)}!" if r.limit is not LimitTier.NONE else ""
+        value_str = f"{r.han} han {r.fu.total} fu{limit_str} — {yaku_str}"
+
+    return f"Seat {event.seat} wins by {source} with {tile}! {value_str} — +{r.payment.total:,} pts"
+
 
 def _event_text(event: Event, tile_label) -> str | None:
-    """將一個 event 譯做人睇得明嘅一句（俾 UI 做事件記錄），冇特別想顯示嘅
-    event 就回傳 None。"""
+    """Render an event as a human-readable line for the UI's event log.
+    Returns None for events we don't care to display."""
     if isinstance(event, Discard):
-        flag = "（立直）" if event.riichi else ""
-        return f"Seat {event.seat} 掉 {tile_label(event.tile.kind.value)}{flag}"
+        flag = " (riichi)" if event.riichi else ""
+        return f"Seat {event.seat} discards {tile_label(event.tile.kind.value)}{flag}"
     if isinstance(event, RiichiAccepted):
-        return f"Seat {event.seat} 立直成功"
+        return f"Seat {event.seat} declares riichi"
     if isinstance(event, IndicatorReveal):
-        return f"新 dora 指示牌：{tile_label(event.tile.kind.value)}"
+        return f"New dora indicator: {tile_label(event.tile.kind.value)}"
     if isinstance(event, Win):
-        source = "自摸" if event.from_seat is None else f"食糊 seat {event.from_seat}"
-        return f"Seat {event.seat} {source}！{event.result.han} 飜 {event.result.fu.total} 符"
+        return _win_text(event, tile_label)
     if isinstance(event, Ryuukyoku):
-        return f"流局（{event.kind.name}）"
+        return f"Draw ({event.kind.name})"
     return None
 
 
 def _score_change_text(event: ScoreChange) -> str:
-    parts = [f"Seat {seat}：{'+' if delta >= 0 else ''}{delta}（而家 {score}）" for seat, (delta, score) in
+    parts = [f"Seat {seat}: {'+' if delta >= 0 else ''}{delta} (now {score})" for seat, (delta, score) in
               enumerate(zip(event.deltas, event.scores))]
-    return "分數變化 — " + "，".join(parts)
+    return "Score changes — " + ", ".join(parts)
 
 
 @dataclass
@@ -74,12 +153,14 @@ class GameSession:
         self._advance(action)
 
     def acknowledge_summary(self) -> None:
-        """使用者撳咗「繼續」，先俾佢睇返新一局嘅決策 UI。"""
+        """User pressed "Continue" — clear the summary before showing the
+        next hand's decision UI."""
         self.pending_summary = None
 
     def _advance(self, action: Action | None) -> None:
-        """行落去，直至輪到人類（seat 0）決策，或者成鋪 game 完。
-        中途如果有一局完咗（糊/流局），停低要使用者確認咗個總結先再問下一步。
+        """Advance until it's the human's (seat 0) turn to decide, or the
+        whole match ends. If a hand ends along the way (win/draw), pause
+        so the user can acknowledge the summary before moving on.
         """
         self._summary_lines = []
         try:

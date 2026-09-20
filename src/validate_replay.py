@@ -1,7 +1,9 @@
-"""Phase 2 Part 1（驗證）：由歷史牌譜逆推 wall，用 jansou.game.flow.deal_steps
-逐步重演一場真實牌局，睇吓最後個結果（邊個糊/流局、邊個係莊）啱唔啱歷史記錄。
+"""Phase 2 Part 1 (validation): reconstructs the wall from a historical
+log, replays a real match step by step with jansou.game.flow.deal_steps,
+and checks whether the final result (who won/drew, who was dealer) matches
+the historical record.
 
-跑法： uv run python src/validate_replay.py
+Run: uv run python src/validate_replay.py
 """
 
 from jansou.core.rules import RIICHI_DEPOSIT
@@ -38,10 +40,10 @@ def validate_round(round_log, player_count, rules) -> bool:
     except StopIteration as stop:
         outcome = stop.value
     except (OracleMismatch, IllegalActionError) as e:
-        print(f"❌ 重演失敗: {type(e).__name__}: {e}")
+        print(f"❌ Replay failed: {type(e).__name__}: {e}")
         return False
 
-    print(f"重演出嚟嘅 outcome: winners={outcome.winners}  is_draw={outcome.is_draw}")
+    print(f"Replayed outcome: winners={outcome.winners}  is_draw={outcome.is_draw}")
 
     hist_outcome = round_log.outcome
     if isinstance(hist_outcome, Ryuukyoku):
@@ -50,18 +52,18 @@ def validate_round(round_log, player_count, rules) -> bool:
     else:
         expected_winners = tuple(a.winner for a in hist_outcome)
         expected_is_draw = False
-    print(f"歷史記錄嘅 outcome:   winners={expected_winners}  is_draw={expected_is_draw}")
+    print(f"Historical outcome:  winners={expected_winners}  is_draw={expected_is_draw}")
 
     ok = set(outcome.winners) == set(expected_winners) and outcome.is_draw == expected_is_draw
-    print("✅ 一致" if ok else "❌ 唔一致")
+    print("✅ Match" if ok else "❌ Mismatch")
     return ok
 
 
 def main() -> None:
     paifu = parse_mjai(TEST_FILE)
     round_log = paifu.rounds[TEST_ROUND_INDEX]
-    print(f"驗證緊 {TEST_FILE} 第 {TEST_ROUND_INDEX} 局")
-    print(f"事件數: {len(round_log.events)}")
+    print(f"Validating {TEST_FILE} round {TEST_ROUND_INDEX}")
+    print(f"Event count: {len(round_log.events)}")
     validate_round(round_log, paifu.player_count, paifu.rules)
 
 

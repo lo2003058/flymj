@@ -1,5 +1,6 @@
-"""Step 7：訓練一個 arm 嘅可重用邏輯（minibatch，data 留喺 CPU 用 uint8，
-一個 batch 先轉 float32 搬落 device——全量 data 一次過搬落 MPS 會爆記憶體）。
+"""Step 7: reusable logic for training one arm (minibatched, data stays on
+CPU as uint8, converted to float32 and moved to device one batch at a
+time — moving the entire dataset onto MPS at once would blow out memory).
 """
 
 import numpy as np
@@ -46,10 +47,11 @@ def train_one_arm(
     patience: int = 3,
     verbose_tag: str = "",
 ) -> dict:
-    """訓練到 max_epochs，或者 val_acc 連續 `patience` 個 epoch 冇再創新高就
-    早停。最終用返 val_acc 最好嗰個 epoch 嘅 weight 嚟 evaluate test set，
-    咁樣每條 arm 都訓練到佢自己嘅上限先比較，唔會因為固定 epoch 數而偏袒
-    邊一條 arm（例如收斂快啲嘅 arm）。
+    """Trains up to max_epochs, or stops early once val_acc goes
+    `patience` epochs in a row without a new best. Evaluates the test set
+    using the weights from whichever epoch had the best val_acc, so each
+    arm is trained to its own limit before comparison, rather than a fixed
+    epoch count favoring whichever arm happens to converge faster.
     """
     torch.manual_seed(seed)
 

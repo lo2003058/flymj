@@ -1,21 +1,24 @@
-"""Step 6：由本機已經落好嘅 2009 年 MJAI 牌譜（見 explore_paifu.py）砌全量
-掉牌決策 dataset。
+"""Step 6: builds the full discard-decision dataset from the already-
+downloaded 2009 MJAI logs (see explore_paifu.py).
 
-淨係用 2009 年（已經落咗），唔再落多年份——三條 arm 用緊同一批 data，
-邊個年代嘅 meta 都唔會偏袒任何一條 arm，落多一年淨係加 ToS 風險同下載
-時間，冇實驗上嘅著數。MAX_FILES 揀到令總決策數貼近 task.md 講嘅
-100-200 萬（見 explore_paifu.py：一年 6897 個檔，平均每檔 ~515 個決策）。
+Uses only 2009 (already downloaded) — no further years — since all three
+arms use the same data, so no era's meta can favor any particular arm, and
+downloading more years just adds ToS risk and download time with no
+experimental benefit. MAX_FILES is chosen to bring the total decision
+count close to task.md's 1-2 million target (see explore_paifu.py: one
+year has 6897 files, averaging ~515 decisions each).
 
-輸出 data/processed/discard_dataset.parquet，一行一個掉牌決策：
-  - match_id, year, kyoku_index, event_index, seat   （呢四樣夾埋可以返轉頭
-    用 jansou.io.mjai.parse_mjai() 揾返原始檔案嘅完整 event stream）
-  - split                                             train/val/test，按
-    match 分（唔按行），見 splits.py
+Writes data/processed/discard_dataset.parquet, one row per discard decision:
+  - match_id, year, kyoku_index, event_index, seat   (these four together
+    let you look up the original file's full event stream again via
+    jansou.io.mjai.parse_mjai())
+  - split                                             train/val/test, split
+    by match (not by row), see splits.py
   - round_wind, dealer, honba, kyotaku, scores_at_round_start
   - hand_counts, hand_red_counts, n_melds, n_dora_indicators
-  - discard_tile, discard_is_red, is_riichi, is_tsumogiri   （呢四樣係 label）
+  - discard_tile, discard_is_red, is_riichi, is_tsumogiri   (these four are the labels)
 
-跑法： uv run python src/build_discard_dataset.py
+Run: uv run python src/build_discard_dataset.py
 """
 
 from pathlib import Path
@@ -67,49 +70,51 @@ def build_rows(files: list[Path], file_splits: list[str]) -> list[dict]:
                 )
 
         if (file_index + 1) % 200 == 0:
-            print(f"已處理 {file_index + 1}/{len(files)} 個檔，累積 {len(rows)} 個決策")
+            print(f"Processed {file_index + 1}/{len(files)} files, {len(rows)} decisions so far")
 
     return rows
 
 
 def main() -> None:
     all_files = sorted(PAIFU_DIR.glob("*.mjson"))
-    print(f"{PAIFU_DIR} 總共有 {len(all_files)} 個檔")
+    print(f"{PAIFU_DIR} has {len(all_files)} files total")
     if not all_files:
-        raise SystemExit("搵唔到已落嘅牌譜，先跑 src/explore_paifu.py 落 data")
+        raise SystemExit("No downloaded logs found, run src/explore_paifu.py to download data first")
 
     files = all_files[:MAX_FILES]
-    print(f"呢次處理頭 {len(files)} 個檔（MAX_FILES={MAX_FILES}）")
+    print(f"Processing the first {len(files)} files this run (MAX_FILES={MAX_FILES})")
 
     file_splits = assign_splits(len(files))
-    print(f"Split 分佈（按 match）: "
+    print(f"Split distribution (by match): "
           f"train={int((file_splits == 'train').sum())}  "
           f"val={int((file_splits == 'val').sum())}  "
           f"test={int((file_splits == 'test').sum())}")
 
     rows = build_rows(files, file_splits)
-    print(f"\n總共 {len(rows)} 個掉牌決策，嚟自 {len(files)} 個檔")
-    print(f"平均每個檔（一場 hanchan）: {len(rows) / len(files):.1f} 個決策")
+    print(f"\nTotal {len(rows)} discard decisions, from {len(files)} files")
+    print(f"Mean per file (one hanchan): {len(rows) / len(files):.1f} decisions")
 
     df = pl.DataFrame(rows)
     print("\n=== dataset schema ===")
     print(df.schema)
 
-    print("\n=== decision 數按 split ===")
+    print("\n=== decision count by split ===")
     print(df.group_by("split").agg(pl.len().alias("count")))
 
-    print("\n=== 掉牌 tile 分佈（頭 10）===")
+    print("\n=== discard tile distribution (top 10) ===")
     print(df.group_by("discard_tile").agg(pl.len().alias("count")).sort("count", descending=True).head(10))
 
-    print("\n=== riichi / tsumogiri 比例 ===")
-    print(f"riichi discard 比例: {df['is_riichi'].mean():.4f}")
-    print(f"tsumogiri 比例: {df['is_tsumogiri'].mean():.4f}")
+    print("\n=== riichi / tsumogiri rate ===")
+    print(f"riichi discard rate: {df['is_riichi'].mean():.4f}")
+    print(f"tsumogiri rate: {df['is_tsumogiri'].mean():.4f}")
 
-    print("\n=== 手牌大細 sanity check ===")
-    # 唔係淨係 13/14：每 call 咗一舊 meld，concealed hand 淨落嚟嘅正確關係係
-    # hand_size == 14 - 3*n_melds（call 咗嘅 meld 出 2 隻自己嘅牌 + 之後嗰下
-    # 逼住即刻掉牌，兩樣加埋淨低 -3，唔係天真咁諗嘅 -2；用 raw JSONL 逐個
-    # event 手動 trace 驗證過先落實呢條關係，唔係一開始就假設嘅）。
+    print("\n=== hand size sanity check ===")
+    # Not simply 13/14: with each called meld, the correct relationship
+    # for the remaining concealed hand is hand_size == 14 - 3*n_melds
+    # (a meld call removes 2 of your own tiles, and the immediately
+    # forced discard after removes one more, so -3 total, not the naive
+    # -2 you might expect). This relationship was verified by manually
+    # tracing the raw JSONL event-by-event, not just assumed upfront.
     df_check = df.with_columns(
         hand_size=pl.col("hand_counts").list.sum(),
         expected=14 - 3 * pl.col("n_melds"),
@@ -117,12 +122,12 @@ def main() -> None:
     print(df_check.group_by(["n_melds", "hand_size"]).agg(pl.len().alias("count")).sort(["n_melds", "hand_size"]))
     bad = df_check.filter(pl.col("hand_size") != pl.col("expected"))
     if bad.height:
-        raise AssertionError(f"{bad.height} 行 hand_size != 14 - 3*n_melds，replay 邏輯有 bug")
-    print("全部一致：hand_size == 14 - 3*n_melds")
+        raise AssertionError(f"{bad.height} rows have hand_size != 14 - 3*n_melds, the replay logic has a bug")
+    print("All consistent: hand_size == 14 - 3*n_melds")
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     df.write_parquet(OUT_PATH)
-    print(f"\n已存 {OUT_PATH}")
+    print(f"\nSaved {OUT_PATH}")
 
 
 if __name__ == "__main__":

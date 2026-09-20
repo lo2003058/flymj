@@ -1,16 +1,17 @@
-"""Step B (task.md): 用 connectome edge weights 生成三組 mask。
+"""Step B (task.md): generate three mask sets from connectome edge weights.
 
-輸出 data/processed/masks.npz，包含：
-  - mask_pn_kc_real   : (n_kc, n_pn)      真 connectome mask
-  - mask_kc_mbon_real : (n_mbon, n_kc)    真 connectome mask
-  - mask_pn_kc_rand   : (20, n_kc, n_pn)   degree-matched random mask，seed 0-19
-  - mask_kc_mbon_rand : (20, n_mbon, n_kc) degree-matched random mask，seed 0-19
-  - pn_ids, kc_ids, mbon_ids              body id（int64），依 mask 嘅 row/col 次序排
+Writes data/processed/masks.npz, containing:
+  - mask_pn_kc_real   : (n_kc, n_pn)      real connectome mask
+  - mask_kc_mbon_real : (n_mbon, n_kc)    real connectome mask
+  - mask_pn_kc_rand   : (20, n_kc, n_pn)   degree-matched random mask, seeds 0-19
+  - mask_kc_mbon_rand : (20, n_mbon, n_kc) degree-matched random mask, seeds 0-19
+  - pn_ids, kc_ids, mbon_ids              body ids (int64), ordered to match each mask's row/col order
 
-Mask convention：跟 PyTorch nn.Linear.weight 嘅 (out_features, in_features) 慣例，
-即係 row = 下游（post-synaptic）neuron，column = 上游（pre-synaptic）neuron。
+Mask convention: follows PyTorch's `nn.Linear.weight` (out_features,
+in_features) convention, i.e. row = downstream (post-synaptic) neuron,
+column = upstream (pre-synaptic) neuron.
 
-跑法： uv run python src/build_masks.py
+Run: uv run python src/build_masks.py
 """
 
 import numpy as np
@@ -28,12 +29,13 @@ N_SEEDS = 20
 
 
 def load_relevant_edges(pn_ids: np.ndarray, kc_ids: np.ndarray, mbon_ids: np.ndarray) -> pl.DataFrame:
-    """讀 edges.feather，只留低 weight >= MIN_WEIGHT 而且屬於
-    PN->KC 或 KC->MBON 呢兩個 subgraph 嘅 edge。
+    """Read edges.feather, keeping only edges with weight >= MIN_WEIGHT that
+    belong to either the PN->KC or KC->MBON subgraph.
 
-    先試 pl.scan_ipc() 做 lazy filter（唔使成 1.1GB 檔案全部入 RAM）；
-    如果撞到 annotations.feather 嗰種 dictionary-encoding bug，就 fallback
-    去 load_feather()（pyarrow-based，食多啲 RAM 但一定 work）。
+    Tries `pl.scan_ipc()` for a lazy filter first (avoids loading the whole
+    1.1GB file into RAM); if it hits the same dictionary-encoding bug as
+    annotations.feather, falls back to `load_feather()` (pyarrow-based,
+    uses more RAM but always works).
     """
     pn_kc_cond = pl.col("body_pre").is_in(pn_ids) & pl.col("body_post").is_in(kc_ids)
     kc_mbon_cond = pl.col("body_pre").is_in(kc_ids) & pl.col("body_post").is_in(mbon_ids)
@@ -49,7 +51,7 @@ def load_relevant_edges(pn_ids: np.ndarray, kc_ids: np.ndarray, mbon_ids: np.nda
             .collect()
         )
     except pl.exceptions.ComputeError as e:
-        print(f"\npl.scan_ipc() 撞到 ComputeError ({e})，fallback 去 pyarrow loader")
+        print(f"\npl.scan_ipc() hit a ComputeError ({e}), falling back to the pyarrow loader")
         full = load_feather(EDGES_PATH)
         print("\n=== edges.feather schema (pyarrow fallback) ===")
         print(full.schema)
@@ -67,7 +69,8 @@ def build_real_mask(
     post_ids: np.ndarray,
     post_index: dict[int, int],
 ) -> np.ndarray:
-    """將 (body_pre, body_post) edge list 轉做 binary mask，shape (n_post, n_pre)。"""
+    """Convert a (body_pre, body_post) edge list into a binary mask of
+    shape (n_post, n_pre)."""
     n_pre = len(pre_ids)
     n_post = len(post_ids)
     mask = np.zeros((n_post, n_pre), dtype=np.float32)
@@ -81,8 +84,10 @@ def build_real_mask(
 
 
 def build_random_masks(real_mask: np.ndarray, n_seeds: int) -> np.ndarray:
-    """Degree-matched random mask：每個 post neuron 保留返真 mask 嗰個 in-degree k，
-    喺 pre neuron pool 入面隨機（無放回）抽 k 個。每個 seed 獨立生成一份。
+    """Degree-matched random mask: each post neuron keeps the same
+    in-degree k as in the real mask, drawing k pre neurons at random
+    (without replacement) from the pre neuron pool. Each seed generates
+    an independent mask.
     """
     n_post, n_pre = real_mask.shape
     degrees = real_mask.sum(axis=1).astype(np.int64)
@@ -108,7 +113,7 @@ def main() -> None:
     kc_ids = np.sort(get_kc(ann)["bodyId"].to_numpy())
     mbon_ids = np.sort(get_mbon(ann)["bodyId"].to_numpy())
 
-    print("=== label 數量 (由 src/labels.py 嘅定義揀出，同 explore_labels.py 一致) ===")
+    print("=== label counts (selected via src/labels.py's definitions, matching explore_labels.py) ===")
     print(f"PN   : {len(pn_ids)}")
     print(f"KC   : {len(kc_ids)}")
     print(f"MBON : {len(mbon_ids)}")
@@ -118,7 +123,7 @@ def main() -> None:
     mbon_index = {int(b): i for i, b in enumerate(mbon_ids)}
 
     edges = load_relevant_edges(pn_ids, kc_ids, mbon_ids)
-    print(f"\n=== filter 完 (weight >= {MIN_WEIGHT}) 剩低嘅相關 edge 數 ===")
+    print(f"\n=== relevant edges remaining after filtering (weight >= {MIN_WEIGHT}) ===")
     print(edges.height)
 
     pn_kc_edges = edges.filter(
@@ -127,8 +132,8 @@ def main() -> None:
     kc_mbon_edges = edges.filter(
         pl.col("body_pre").is_in(kc_ids) & pl.col("body_post").is_in(mbon_ids)
     )
-    print(f"PN -> KC   edge 數: {pn_kc_edges.height}")
-    print(f"KC -> MBON edge 數: {kc_mbon_edges.height}")
+    print(f"PN -> KC   edge count: {pn_kc_edges.height}")
+    print(f"KC -> MBON edge count: {kc_mbon_edges.height}")
 
     mask_pn_kc_real = build_real_mask(pn_kc_edges, pn_ids, pn_index, kc_ids, kc_index)
     mask_kc_mbon_real = build_real_mask(kc_mbon_edges, kc_ids, kc_index, mbon_ids, mbon_index)
@@ -137,26 +142,26 @@ def main() -> None:
     mask_kc_mbon_rand = build_random_masks(mask_kc_mbon_real, N_SEEDS)
 
     print("\n=== Mask shape / density ===")
-    print(f"mask_pn_kc_real   : shape={mask_pn_kc_real.shape}, 非零元素={int(mask_pn_kc_real.sum())}, "
+    print(f"mask_pn_kc_real   : shape={mask_pn_kc_real.shape}, nonzero={int(mask_pn_kc_real.sum())}, "
           f"density={mask_pn_kc_real.mean():.5f}")
-    print(f"mask_kc_mbon_real : shape={mask_kc_mbon_real.shape}, 非零元素={int(mask_kc_mbon_real.sum())}, "
+    print(f"mask_kc_mbon_real : shape={mask_kc_mbon_real.shape}, nonzero={int(mask_kc_mbon_real.sum())}, "
           f"density={mask_kc_mbon_real.mean():.5f}")
     print(f"mask_pn_kc_rand   : shape={mask_pn_kc_rand.shape} (seed 0-{N_SEEDS - 1})")
     print(f"mask_kc_mbon_rand : shape={mask_kc_mbon_rand.shape} (seed 0-{N_SEEDS - 1})")
 
     kc_in_degree = mask_pn_kc_real.sum(axis=1)
-    print(f"\nKC 平均 in-degree (PN input): {kc_in_degree.mean():.2f} "
+    print(f"\nKC mean in-degree (PN input): {kc_in_degree.mean():.2f} "
           f"(min={kc_in_degree.min():.0f}, max={kc_in_degree.max():.0f})")
 
-    # sanity check：random mask 嘅 degree 分佈一定要同真 mask 一模一樣
+    # sanity check: the random masks' degree distribution must exactly match the real mask
     for seed in range(N_SEEDS):
         real_deg = mask_pn_kc_real.sum(axis=1)
         rand_deg = mask_pn_kc_rand[seed].sum(axis=1)
-        assert np.array_equal(real_deg, rand_deg), f"seed {seed} 嘅 PN->KC degree 同真 mask 對唔上"
+        assert np.array_equal(real_deg, rand_deg), f"seed {seed}'s PN->KC degree doesn't match the real mask"
         real_deg2 = mask_kc_mbon_real.sum(axis=1)
         rand_deg2 = mask_kc_mbon_rand[seed].sum(axis=1)
-        assert np.array_equal(real_deg2, rand_deg2), f"seed {seed} 嘅 KC->MBON degree 同真 mask 對唔上"
-    print("\ndegree-matched 驗證通過：每個 seed 嘅 random mask 同真 mask 逐個 node in-degree 一致。")
+        assert np.array_equal(real_deg2, rand_deg2), f"seed {seed}'s KC->MBON degree doesn't match the real mask"
+    print("\nDegree-matching verified: every seed's random mask has the same per-node in-degree as the real mask.")
 
     np.savez(
         OUT_PATH,
@@ -168,7 +173,7 @@ def main() -> None:
         kc_ids=kc_ids,
         mbon_ids=mbon_ids,
     )
-    print(f"\n已存 {OUT_PATH}")
+    print(f"\nSaved {OUT_PATH}")
 
 
 if __name__ == "__main__":

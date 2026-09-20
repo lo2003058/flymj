@@ -1,25 +1,27 @@
-"""Phase 2 Part 3：將 action_dataset.parquet 嘅一行（場面 + trigger）編碼做
-(34, 34) feature tensor——喺 Phase 1 discard-only 嗰 32-channel（見
-features.py）上面加多 2 個 channel：而家反應緊邊隻棄牌、呢個係咪一個
-reaction 決策。
+"""Phase 2 Part 3: encodes one row of action_dataset.parquet (game state +
+trigger) into a (34, 34) feature tensor — adding 2 channels on top of the
+Phase 1 discard-only 32-channel scheme (see features.py): which tile is
+currently being reacted to, and whether this is a reaction decision.
 
-同 features.py 分開一個檔，係因為 Phase 1 已經訓練/存低嘅 model_arm_a.pt
-跟 32-channel 輸入形狀嚟，唔想動到佢。
+Kept in a separate file from features.py because the already-trained
+Phase 1 checkpoint was built against the 32-channel input shape, which we
+don't want to disturb.
 
-Channel 設計（34 planes，全部 binary）：
-  0-3   自己手牌 count thermometer
-  4     自己手牌有冇紅五
-  5-8   自己已 meld 嘅牌 count thermometer
-  9-12  自己牌河 count thermometer
-  13-16 下家牌河 count thermometer
-  17-20 對家牌河 count thermometer
-  21-24 上家牌河 count thermometer
-  25    現正生效嘅 dora 牌
-  26    場風
-  27    自風
-  28-31 自己/下家/對家/上家 riichi 咗未
-  32    而家反應緊邊隻棄牌（DISCARD_REACTION 先有，SELF 決策全 0）
-  33    呢個係咪一個 DISCARD_REACTION 決策（broadcast）
+Channel design (34 planes, all binary):
+  0-3   own hand count thermometer
+  4     whether own hand has a red five
+  5-8   own melded tiles count thermometer
+  9-12  own discard pile count thermometer
+  13-16 right (shimocha) discard pile count thermometer
+  17-20 across (toimen) discard pile count thermometer
+  21-24 left (kamicha) discard pile count thermometer
+  25    currently active dora tile
+  26    round wind
+  27    seat wind
+  28-31 self/right/across/left riichi status
+  32    which tile is currently being reacted to (only set for
+        DISCARD_REACTION; all zero for SELF decisions)
+  33    whether this is a DISCARD_REACTION decision (broadcast)
 """
 
 import numpy as np
@@ -46,9 +48,10 @@ def encode(
     trigger_tile: int = -1,
     player_count: int = 4,
 ) -> np.ndarray:
-    """meld_counts/discard_counts/riichi 呢三個係用「絕對 seat」(0-3) 做
-    index（同 action_dataset.parquet 嘅 snapshot_state 一致），呢度轉做
-    「相對於 seat」（自己/下家/對家/上家）先編碼，同 Phase 1 嗰套一致。
+    """meld_counts/discard_counts/riichi are indexed by absolute seat
+    (0-3), matching action_dataset.parquet's snapshot_state. Here they get
+    rotated to seat-relative order (self/right/across/left) before
+    encoding, matching the Phase 1 scheme.
     """
     planes = [
         _thermometer(hand_counts),  # 4
@@ -92,7 +95,7 @@ def encode(
 
 
 def encode_row(row: dict, player_count: int = 4) -> np.ndarray:
-    """由 action_dataset.parquet 嘅一行（已經 to_dict）直接編碼。"""
+    """Encode directly from a row of action_dataset.parquet (already a dict)."""
     return encode(
         seat=row["seat"],
         hand_counts=row["hand_counts"],

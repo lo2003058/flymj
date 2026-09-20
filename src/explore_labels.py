@@ -1,10 +1,11 @@
-"""Step A (task.md): 喺 annotations.feather 度揾 KC / MBON / PN 三組 label。
+"""Step A (task.md): find the KC / MBON / PN label sets in annotations.feather.
 
-KC 用邊條欄、邊個條件已經喺 task.md 確認咗。
-MBON 同 PN 未確認，呢個 script 會先做探索（印晒 class/superclass 欄有咩值），
-再用揾到嘅候選定義去 summarize，等使用者肉眼核對。
+Which column and condition to use for KC was already confirmed in task.md.
+MBON and PN weren't confirmed yet, so this script first explores (prints
+every value in the class/superclass columns), then summarizes the
+candidate definitions found so the user can eyeball-check them.
 
-跑法： uv run python src/explore_labels.py
+Run: uv run python src/explore_labels.py
 """
 
 import polars as pl
@@ -16,7 +17,7 @@ ANNOTATIONS_PATH = "data/raw/annotations.feather"
 
 
 def summarize_group(df: pl.DataFrame, name: str, column: str, condition: str, mask: pl.Series) -> pl.DataFrame:
-    """印一組 neuron label 嘅 total count / type 數 / somaSide breakdown。"""
+    """Print a neuron label group's total count / type count / somaSide breakdown."""
     matched = df.filter(mask)
     frag_mask = is_fragment(matched)
     excluded = matched.filter(frag_mask)
@@ -25,14 +26,14 @@ def summarize_group(df: pl.DataFrame, name: str, column: str, condition: str, ma
     print(f"\n{'=' * 70}")
     print(f"=== {name} ===")
     print(f"{'=' * 70}")
-    print(f"用嘅欄: {column!r}   條件: {condition}")
-    print(f"排除 fragment 前總數: {matched.height}")
+    print(f"Column used: {column!r}   Condition: {condition}")
+    print(f"Total before excluding fragments: {matched.height}")
     if excluded.height:
-        print(f"排除咗 {excluded.height} 粒 fragment neuron")
-    print(f"排除 fragment 後總數: {kept.height}")
-    print(f"distinct type 數: {kept['type'].n_unique()}")
+        print(f"Excluded {excluded.height} fragment neurons")
+    print(f"Total after excluding fragments: {kept.height}")
+    print(f"Distinct type count: {kept['type'].n_unique()}")
 
-    print("\n-- type breakdown (依 count 排序) --")
+    print("\n-- type breakdown (sorted by count) --")
     print(kept.group_by("type").agg(pl.len().alias("count")).sort("count", descending=True))
 
     print("\n-- somaSide breakdown --")
@@ -50,68 +51,71 @@ def main() -> None:
     print(ann.shape)
 
     # ------------------------------------------------------------------
-    # KC：已確認。type 欄 starts_with "KC"。
+    # KC: confirmed. `type` column starts_with "KC".
     # ------------------------------------------------------------------
     kc = summarize_group(
-        ann, "KC (已確認)", "type", "starts_with('KC')", kc_mask(ann)
+        ann, "KC (confirmed)", "type", "starts_with('KC')", kc_mask(ann)
     )
 
     # ------------------------------------------------------------------
-    # 探索：class / superclass 欄有咩值，等 MBON / PN 揀有根據。
+    # Exploration: what values exist in class / superclass, to inform
+    # picking MBON / PN definitions.
     # ------------------------------------------------------------------
     print(f"\n{'=' * 70}")
-    print("=== 探索: class 欄 value_counts (未確認 MBON/PN 定義前，先睇原始分佈) ===")
+    print("=== Exploration: `class` column value_counts (raw distribution before confirming MBON/PN) ===")
     print(f"{'=' * 70}")
     print(ann.get_column("class").value_counts(sort=True))
 
     print(f"\n{'=' * 70}")
-    print("=== 探索: superclass 欄 value_counts ===")
+    print("=== Exploration: `superclass` column value_counts ===")
     print(f"{'=' * 70}")
     print(ann.get_column("superclass").value_counts(sort=True))
 
     # ------------------------------------------------------------------
-    # MBON：候選定義 = class 欄 == "MBON"
+    # MBON: candidate definition = `class` column == "MBON"
     # ------------------------------------------------------------------
     mbon = summarize_group(
-        ann, "MBON (候選: class == 'MBON')", "class", "== 'MBON'", mbon_mask(ann)
+        ann, "MBON (candidate: class == 'MBON')", "class", "== 'MBON'", mbon_mask(ann)
     )
 
     # ------------------------------------------------------------------
-    # PN：候選定義 = class 欄 == "ALPN"（antennal lobe projection neuron）。
-    # ALPN 入面 type 開頭 "M_" 嘅係 multiglomerular PN，
-    # 淨返嘅（"<glomerulus>_lPN/adPN/vPN/..." 呢種命名）先係 uniglomerular PN。
-    # 呢個 split 純粹靠印出嚟嘅 type list 肉眼分辨，唔係自動判斷，
-    # 所以下面連 multiglomerular 嗰組都印埋出嚟，等使用者自己核對呢個 split 啱唔啱。
+    # PN: candidate definition = `class` column == "ALPN" (antennal lobe
+    # projection neuron). Within ALPN, types starting with "M_" are
+    # multiglomerular PNs; the rest (named like
+    # "<glomerulus>_lPN/adPN/vPN/...") are uniglomerular PNs.
+    # This split is done purely by eyeballing the printed type list, not
+    # an automatic decision, so the multiglomerular group is also printed
+    # below for the user to verify the split is correct.
     # ------------------------------------------------------------------
     alpn_all = summarize_group(
-        ann, "PN 探索: 全部 ALPN (未分 uni/multi-glomerular)", "class", "== 'ALPN'", ann["class"] == "ALPN"
+        ann, "PN exploration: all ALPN (not yet split uni/multi-glomerular)", "class", "== 'ALPN'", ann["class"] == "ALPN"
     )
 
     is_multiglomerular = alpn_all["type"].str.starts_with("M_")
     uni_mask = pn_mask(alpn_all)
     print(f"\n{'=' * 70}")
-    print("=== PN 候選 split: ALPN 入面 type 開頭 'M_' 嘅係 multiglomerular，排除 ===")
+    print("=== PN candidate split: within ALPN, types starting with 'M_' are multiglomerular, excluded ===")
     print(f"{'=' * 70}")
-    print(f"Multiglomerular (type starts_with 'M_'): {is_multiglomerular.sum()} 粒")
-    print(f"Uniglomerular 候選 (其餘): {uni_mask.sum()} 粒")
+    print(f"Multiglomerular (type starts_with 'M_'): {is_multiglomerular.sum()} cells")
+    print(f"Uniglomerular candidates (the rest): {uni_mask.sum()} cells")
 
     pn = summarize_group(
         alpn_all,
-        "PN (候選: class == 'ALPN' AND NOT type.starts_with('M_'))",
+        "PN (candidate: class == 'ALPN' AND NOT type.starts_with('M_'))",
         "class + type",
         "class == 'ALPN' AND NOT type.starts_with('M_')",
         uni_mask,
     )
 
     # ------------------------------------------------------------------
-    # Sanity check：同 task.md 預期數量級對比
+    # Sanity check: compare against the order-of-magnitude expected in task.md
     # ------------------------------------------------------------------
     print(f"\n{'=' * 70}")
-    print("=== Sanity check (對比 task.md 預期數量級) ===")
+    print("=== Sanity check (vs. task.md's expected order of magnitude) ===")
     print(f"{'=' * 70}")
-    print(f"KC   : {kc.height} 粒 (預期約 4000)")
-    print(f"MBON : {mbon.height} 粒, {mbon['type'].n_unique()} 個 type (預期 100-200 粒, 30-100 個 type)")
-    print(f"PN   : {pn.height} 粒, {pn['type'].n_unique()} 個 type (預期 100-200 粒)")
+    print(f"KC   : {kc.height} cells (expected ~4000)")
+    print(f"MBON : {mbon.height} cells, {mbon['type'].n_unique()} types (expected 100-200 cells, 30-100 types)")
+    print(f"PN   : {pn.height} cells, {pn['type'].n_unique()} types (expected 100-200 cells)")
 
 
 if __name__ == "__main__":

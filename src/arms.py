@@ -1,10 +1,11 @@
-"""三條 arm 嘅 mask 建構：
-  A: 真 connectome mask
-  B: degree-matched random mask（masks.npz 入面 20 個 pre-built seed 揀一個）
-  C: dense（冇 mask），hidden dim 縮到「有效參數量」夾返 Arm A
+"""Mask construction for the three arms:
+  A: real connectome mask
+  B: degree-matched random mask (pick one of the 20 pre-built seeds in masks.npz)
+  C: dense (no mask), hidden dim shrunk so "effective parameter count" matches Arm A
 
-「有效參數量」= mask 嘅非零 weight 數 + bias 數（masked-out 嘅 weight 冇
-gradient、永遠係 0，唔算落個網絡真正用緊嘅參數度）。
+"Effective parameter count" = number of nonzero mask weights + biases
+(masked-out weights get no gradient and are always 0, so they don't count
+toward what the network actually uses).
 """
 
 import numpy as np
@@ -26,8 +27,9 @@ def random_masks(masks_npz, seed: int) -> tuple[torch.Tensor, torch.Tensor]:
 
 
 def dense_hidden_dim(masks_npz) -> int:
-    """解 H：等 dense 中間層 (n_pn -> H -> n_mbon) 嘅總參數量
-    （weight 全部非零 + bias）夾返 Arm A 嗰兩層 masked layer 嘅有效參數量。
+    """Solve for H: the dense hidden layer's (n_pn -> H -> n_mbon) total
+    parameter count (all weights nonzero + biases) should match Arm A's
+    two masked layers' effective parameter count.
     """
     mask_pn_kc = masks_npz["mask_pn_kc_real"]
     mask_kc_mbon = masks_npz["mask_kc_mbon_real"]
@@ -36,7 +38,7 @@ def dense_hidden_dim(masks_npz) -> int:
 
     nnz_pn_kc = int(mask_pn_kc.sum())
     nnz_kc_mbon = int(mask_kc_mbon.sum())
-    target = nnz_pn_kc + nnz_kc_mbon + n_kc + n_mbon  # weight(非零) + bias
+    target = nnz_pn_kc + nnz_kc_mbon + n_kc + n_mbon  # weights (nonzero) + biases
 
     # dense: n_pn*H + H(bias) + H*n_mbon + n_mbon(bias) == target
     h = round((target - n_mbon) / (n_pn + n_mbon + 1))
@@ -58,4 +60,4 @@ def build_arm_masks(arm: str, seed: int, masks_npz) -> tuple[torch.Tensor, torch
     if arm == "C":
         mask_pn_kc, mask_kc_mbon, _ = dense_masks(masks_npz)
         return mask_pn_kc, mask_kc_mbon
-    raise ValueError(f"未知嘅 arm: {arm!r}")
+    raise ValueError(f"Unknown arm: {arm!r}")

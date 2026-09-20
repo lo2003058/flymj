@@ -1,24 +1,27 @@
-"""KC / MBON / PN label 定義。
+"""KC / MBON / PN label definitions.
 
-呢三個定義已經喺 explore_labels.py 用 print 出嚟嘅結果同使用者核對過
-（見 data/doc/task.md）：
-  - KC   : type 欄 starts_with('KC')                          （已確認）
-  - MBON : class 欄 == 'MBON'                                  （已確認，97 粒 / 37 type）
-  - PN   : class 欄 == 'ALPN'，剔走 type 開頭 'M_'（multiglomerular） （已確認，387 粒 / 101 type）
+These three definitions were confirmed against the printed output of
+explore_labels.py (see data/doc/task.md):
+  - KC   : `type` column starts_with('KC')                       (confirmed)
+  - MBON : `class` column == 'MBON'                               (confirmed, 97 cells / 37 types)
+  - PN   : `class` column == 'ALPN', excluding `type` starting with
+           'M_' (multiglomerular)                                 (confirmed, 387 cells / 101 types)
 
-387 呢個數字比 task.md 原先預期嘅 100-200 高，推測係因為 100-200 嗰個預期
-嚟自單邊腦嘅舊文獻，而 male CNS 呢個 dataset 兩邊腦都有，387 大約等於單邊
-~190 x2。已經同使用者確認用 387。
+387 is higher than the 100-200 originally expected in task.md — likely
+because that expectation came from older single-hemisphere literature,
+while this male CNS dataset covers both hemispheres (387 ≈ 190 per side
+x2). Confirmed with the user to proceed with 387.
 
-呢個 module 係單一嚟源，等 explore_labels.py 同 build_masks.py 兩個
-script 用緊嘅定義保證一致，唔會各自維護一份走數。
+This module is the single source of truth, so explore_labels.py and
+build_masks.py stay consistent instead of each maintaining a drifting copy.
 """
 
 import polars as pl
 
 
 def is_fragment(df: pl.DataFrame) -> pl.Series:
-    """instance 欄含 'fragment'（大小寫不分）嘅係未完整重建，要排除。"""
+    """Rows whose `instance` contains 'fragment' (case-insensitive) are
+    incomplete reconstructions and should be excluded."""
     return df["instance"].str.to_lowercase().str.contains("fragment").fill_null(False)
 
 

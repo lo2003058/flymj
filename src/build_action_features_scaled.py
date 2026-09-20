@@ -1,8 +1,9 @@
-"""Scaling 實驗 Part 6：對應 build_action_dataset_scaled.py 嗰 10 年 action
-dataset 砌 (34 x 34) feature tensor + 三個 head 嘅 label——同
-action_features.npz schema 一樣，但係獨立檔案，唔覆蓋原本個。
+"""Scaling experiment Part 6: builds a (34 x 34) feature tensor plus each
+head's labels for the 10-year action dataset in
+build_action_dataset_scaled.py — same schema as action_features.npz, but a
+separate file that doesn't overwrite the original.
 
-跑法： uv run python src/build_action_features_scaled.py
+Run: uv run python src/build_action_features_scaled.py
 """
 
 import numpy as np
@@ -17,7 +18,7 @@ OUT_PATH = "data/processed/action_features_scaled.npz"
 
 def main() -> None:
     df = pl.read_parquet(DATASET_PATH)
-    print(f"讀到 {df.height} 行")
+    print(f"Read {df.height} rows")
 
     x_list: list[np.ndarray] = []
     self_type_list: list[int] = []
@@ -38,7 +39,7 @@ def main() -> None:
             reaction_list.append(REACTION_ACTION_TYPES.index(row["action_type"]))
 
         if (i + 1) % 500_000 == 0:
-            print(f"已編碼 {i + 1}/{df.height}")
+            print(f"Encoded {i + 1}/{df.height}")
 
     x = np.stack(x_list).astype(np.uint8)
     self_type = np.array(self_type_list, dtype=np.int8)
@@ -50,13 +51,13 @@ def main() -> None:
     print(f"\nX shape={x.shape} dtype={x.dtype}")
     assert x.shape[1:] == (N_CHANNELS, N_TILE_TYPES)
 
-    print("\n=== self_type 分佈（SELF 決策）===")
+    print("\n=== self_type distribution (SELF decisions) ===")
     for i, name in enumerate(SELF_ACTION_TYPES):
         print(f"  {name}: {(self_type == i).sum()}")
-    print("\n=== reaction 分佈（DISCARD_REACTION 決策）===")
+    print("\n=== reaction distribution (DISCARD_REACTION decisions) ===")
     for i, name in enumerate(REACTION_ACTION_TYPES):
         print(f"  {name}: {(reaction == i).sum()}")
-    print(f"\ndiscard_tile 有效（!=-1）行數: {(discard_tile != -1).sum()}")
+    print(f"\nRows with a valid discard_tile (!=-1): {(discard_tile != -1).sum()}")
 
     np.savez_compressed(
         OUT_PATH,
@@ -67,7 +68,7 @@ def main() -> None:
         decision_kind=decision_kind,
         split=split,
     )
-    print(f"\n已存 {OUT_PATH}")
+    print(f"\nSaved {OUT_PATH}")
 
 
 if __name__ == "__main__":

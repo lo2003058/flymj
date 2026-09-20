@@ -1,6 +1,6 @@
-"""Step 8：畫 Arm A/B/C test accuracy 分佈嘅比較圖。
+"""Step 8: plots a comparison of the Arm A/B/C test accuracy distributions.
 
-跑法： uv run python src/plot_experiment.py
+Run: uv run python src/plot_experiment.py
 """
 
 import matplotlib
@@ -41,7 +41,7 @@ def main() -> None:
 
     fig.tight_layout()
     fig.savefig(OUT_PATH, dpi=150)
-    print(f"已存 {OUT_PATH}")
+    print(f"Saved {OUT_PATH}")
 
 
 if __name__ == "__main__":

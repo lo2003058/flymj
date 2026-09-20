@@ -1,12 +1,16 @@
-"""Step 3 探索：落一年天鳳鳳凰卓 MJAI 牌譜，用 jansou parse，肉眼核對啱唔啱。
+"""Step 3 exploration: download one year of Tenhou houou-room MJAI logs,
+parse with jansou, and eyeball-check the results.
 
-嚟源：NikkeTryHard/tenhou-to-mjai 喺 GitHub Releases 派發嘅原始 MJAI yearly
-zip（人類可讀嘅牌名字串，例如 "7s"、"5pr"=紅五，唔係 opaque 整數編碼）。
-揀 2009 年純粹因為佢檔案最細（32MB），落得快，用嚟驗證 pipeline；
-同「呢年 data 質素/數量夠唔夠」冇關係 —— 單一年已經有 ~8000 局，
-每局約 500 個掉牌決策，遠超成個 project 最終想要嘅 100-200 萬個。
+Source: raw yearly MJAI zips distributed via GitHub Releases by
+NikkeTryHard/tenhou-to-mjai (human-readable tile name strings, e.g. "7s",
+"5pr" = red five, not an opaque integer encoding). 2009 was picked purely
+because it's the smallest file (32MB) and downloads fast, to validate the
+pipeline — this has nothing to do with whether that year's data
+quality/volume is sufficient. A single year already has ~8000 matches, at
+~500 discard decisions each, far exceeding the 1-2 million the project
+ultimately wants.
 
-跑法： uv run python src/explore_paifu.py
+Run: uv run python src/explore_paifu.py
 """
 
 import zipfile
@@ -27,23 +31,23 @@ N_SAMPLE_FILES = 5
 
 def download_archive() -> None:
     if ARCHIVE_PATH.exists():
-        print(f"{ARCHIVE_PATH} 已經存在，跳過下載")
+        print(f"{ARCHIVE_PATH} already exists, skipping download")
         return
-    print(f"落緊 {ARCHIVE_URL} ...")
+    print(f"Downloading {ARCHIVE_URL} ...")
     urlretrieve(ARCHIVE_URL, ARCHIVE_PATH)
-    print(f"落完，size={ARCHIVE_PATH.stat().st_size / 1e6:.1f}MB")
+    print(f"Done, size={ARCHIVE_PATH.stat().st_size / 1e6:.1f}MB")
 
 
 def extract_archive() -> list[Path]:
     if EXTRACT_DIR.exists() and any(EXTRACT_DIR.iterdir()):
-        print(f"{EXTRACT_DIR} 已經有嘢，跳過解壓")
+        print(f"{EXTRACT_DIR} already has content, skipping extraction")
     else:
-        print(f"解緊壓去 {EXTRACT_DIR} ...")
+        print(f"Extracting to {EXTRACT_DIR} ...")
         EXTRACT_DIR.mkdir(parents=True, exist_ok=True)
         with zipfile.ZipFile(ARCHIVE_PATH) as zf:
             zf.extractall(EXTRACT_DIR)
     files = sorted(EXTRACT_DIR.glob("*.mjson"))
-    print(f"總共 {len(files)} 個 .mjson 檔")
+    print(f"Total {len(files)} .mjson files")
     return files
 
 
@@ -52,7 +56,7 @@ def main() -> None:
     files = extract_archive()
 
     sample_files = files[:N_SAMPLE_FILES]
-    print(f"\n=== 用 jansou parse 頭 {len(sample_files)} 個檔，核對 schema ===")
+    print(f"\n=== Parsing the first {len(sample_files)} files with jansou, checking the schema ===")
 
     total_rounds = 0
     total_draws = 0
@@ -67,9 +71,9 @@ def main() -> None:
         n_riichi = sum(1 for r in paifu.rounds for e in r.events if isinstance(e, Discard) and e.riichi)
         n_tsumogiri = sum(1 for r in paifu.rounds for e in r.events if isinstance(e, Discard) and e.tsumogiri)
 
-        print(f"\n--- 檔 {i}: {path.name} ---")
-        print(f"player_count={paifu.player_count}  局數={len(paifu.rounds)}  final_scores={paifu.final_scores}")
-        print(f"draw 次數={n_draws}  discard 次數={n_discards}  riichi discard={n_riichi}  tsumogiri={n_tsumogiri}")
+        print(f"\n--- file {i}: {path.name} ---")
+        print(f"player_count={paifu.player_count}  rounds={len(paifu.rounds)}  final_scores={paifu.final_scores}")
+        print(f"draws={n_draws}  discards={n_discards}  riichi discards={n_riichi}  tsumogiri={n_tsumogiri}")
 
         total_rounds += len(paifu.rounds)
         total_draws += n_draws
@@ -77,18 +81,18 @@ def main() -> None:
         total_riichi_discards += n_riichi
         total_tsumogiri += n_tsumogiri
 
-    print(f"\n=== {len(sample_files)} 個檔加埋 ===")
-    print(f"局數: {total_rounds}")
-    print(f"discard 決策總數: {total_discards}")
-    print(f"平均每局 discard 數: {total_discards / total_rounds:.1f}")
-    print(f"平均每個檔(一場 hanchan)嘅 discard 數: {total_discards / len(sample_files):.1f}")
+    print(f"\n=== totals across {len(sample_files)} files ===")
+    print(f"rounds: {total_rounds}")
+    print(f"total discard decisions: {total_discards}")
+    print(f"mean discards per round: {total_discards / total_rounds:.1f}")
+    print(f"mean discards per file (one hanchan): {total_discards / len(sample_files):.1f}")
 
-    print(f"\n=== 第一個檔第一局，逐個 event 肉眼睇（頭 12 個）===")
+    print(f"\n=== first file, first round, eyeballing each event (first 12) ===")
     paifu = parse_mjai(sample_files[0])
     r0 = paifu.rounds[0]
     print(f"round_wind={r0.round_wind}  dealer={r0.dealer}  initial_dora={dump_mjai([r0.initial_dora])}")
     for seat in range(paifu.player_count):
-        print(f"  seat {seat} 起手: {dump_mjai(r0.hands[seat])}")
+        print(f"  seat {seat} starting hand: {dump_mjai(r0.hands[seat])}")
     for e in r0.events[:12]:
         if isinstance(e, Draw):
             print(f"  Draw  seat={e.seat} tile={dump_mjai([e.tile])}")

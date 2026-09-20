@@ -1,17 +1,18 @@
-"""Phase 2 Part 4：由 action_dataset.parquet 砌 (34 x 34) feature tensor +
-三個 head 各自嘅 label，存做 data/processed/action_features.npz。
+"""Phase 2 Part 4: builds a (34 x 34) feature tensor plus each of the three
+heads' labels from action_dataset.parquet, saved to
+data/processed/action_features.npz.
 
-輸出：
+Output:
   X             (N, 34, 34) uint8
-  self_type     (N,) int8   SELF 決策揀咗邊種（index 落 action_model.SELF_ACTION_TYPES），
-                            唔係 SELF 決策就係 -1
-  discard_tile  (N,) int8   DISCARD/RIICHI 揀咗邊隻牌，其他情況 -1
-  reaction      (N,) int8   DISCARD_REACTION 決策揀咗邊種（index 落
-                            action_model.REACTION_ACTION_TYPES），其他情況 -1
+  self_type     (N,) int8   which action a SELF decision chose (index into
+                            action_model.SELF_ACTION_TYPES), -1 if not a SELF decision
+  discard_tile  (N,) int8   which tile a DISCARD/RIICHI chose, -1 otherwise
+  reaction      (N,) int8   which action a DISCARD_REACTION decision chose
+                            (index into action_model.REACTION_ACTION_TYPES), -1 otherwise
   decision_kind (N,) <U20
   split         (N,) <U5
 
-跑法： uv run python src/build_action_features.py
+Run: uv run python src/build_action_features.py
 """
 
 import numpy as np
@@ -26,7 +27,7 @@ OUT_PATH = "data/processed/action_features.npz"
 
 def main() -> None:
     df = pl.read_parquet(DATASET_PATH)
-    print(f"讀到 {df.height} 行")
+    print(f"Read {df.height} rows")
 
     x_list: list[np.ndarray] = []
     self_type_list: list[int] = []
@@ -47,7 +48,7 @@ def main() -> None:
             reaction_list.append(REACTION_ACTION_TYPES.index(row["action_type"]))
 
         if (i + 1) % 50_000 == 0:
-            print(f"已編碼 {i + 1}/{df.height}")
+            print(f"Encoded {i + 1}/{df.height}")
 
     x = np.stack(x_list).astype(np.uint8)
     self_type = np.array(self_type_list, dtype=np.int8)
@@ -59,13 +60,13 @@ def main() -> None:
     print(f"\nX shape={x.shape} dtype={x.dtype}")
     assert x.shape[1:] == (N_CHANNELS, N_TILE_TYPES)
 
-    print("\n=== self_type 分佈（SELF 決策）===")
+    print("\n=== self_type distribution (SELF decisions) ===")
     for i, name in enumerate(SELF_ACTION_TYPES):
         print(f"  {name}: {(self_type == i).sum()}")
-    print("\n=== reaction 分佈（DISCARD_REACTION 決策）===")
+    print("\n=== reaction distribution (DISCARD_REACTION decisions) ===")
     for i, name in enumerate(REACTION_ACTION_TYPES):
         print(f"  {name}: {(reaction == i).sum()}")
-    print(f"\ndiscard_tile 有效（!=-1）行數: {(discard_tile != -1).sum()}")
+    print(f"\nRows with a valid discard_tile (!=-1): {(discard_tile != -1).sum()}")
 
     np.savez_compressed(
         OUT_PATH,
@@ -76,7 +77,7 @@ def main() -> None:
         decision_kind=decision_kind,
         split=split,
     )
-    print(f"\n已存 {OUT_PATH}")
+    print(f"\nSaved {OUT_PATH}")
 
 
 if __name__ == "__main__":

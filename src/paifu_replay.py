@@ -1,9 +1,10 @@
-"""Replay 一個 RoundLog 嘅 event stream，逐步 track 每個 seat 嘅 concealed hand，
-喺遇到 Discard event 嗰陣 yield 返嗰吓嘅完整狀態。
+"""Replays a RoundLog's event stream, tracking each seat's concealed hand
+step by step, and yields the full state at the moment of each Discard event.
 
-呢個邏輯照跟 jansou.io.paifu 入面 `_SeatState`/`_apply_*`（private，唔對外)
-嘅做法，但淨係要「掉牌決策」需要嘅嘢，唔使追蹤佢哋嗰套完整嘅
-riichi/ippatsu/haitei win-context。
+This logic mirrors what `jansou.io.paifu`'s `_SeatState`/`_apply_*`
+(private, not exported) do, but only tracks what's needed for "discard
+decisions" — it doesn't need their full riichi/ippatsu/haitei win-context
+tracking.
 """
 
 from dataclasses import dataclass
@@ -17,10 +18,10 @@ from jansou.io.paifu import Call, Discard, DoraReveal, Draw, Kita, RoundLog
 class DiscardDecision:
     event_index: int
     seat: int
-    hand_counts: list[int]  # 34 位，呢個 seat 掉牌嗰吓嘅 concealed hand
-    hand_red_counts: list[int]  # 34 位，紅五
+    hand_counts: list[int]  # 34 slots, this seat's concealed hand at the moment of the discard
+    hand_red_counts: list[int]  # 34 slots, red fives
     n_melds: int
-    n_dora_indicators: int  # 包括 initial_dora，即係 >=1
+    n_dora_indicators: int  # includes initial_dora, so always >=1
     discard_tile: int  # 0-33
     discard_is_red: bool
     is_riichi: bool
@@ -38,8 +39,9 @@ def _hand_counts(concealed: list[Tile]) -> tuple[list[int], list[int]]:
 
 
 def _remove_meld_tiles(concealed: list[Tile], meld: Meld) -> None:
-    """跟 jansou.io.paifu._remove_meld_tiles 一樣嘅邏輯：拎走個 meld 入面
-    唔係「叫嚟」嗰啲牌（叫嚟嗰隻本身唔喺自己 concealed hand 度）。"""
+    """Same logic as jansou.io.paifu._remove_meld_tiles: removes from the
+    meld only the tiles that weren't the "called" tile (the called tile
+    itself was never in one's own concealed hand)."""
     from_hand = list(meld.tiles)
     if meld.called is not None:
         from_hand.remove(meld.called)
@@ -48,10 +50,11 @@ def _remove_meld_tiles(concealed: list[Tile], meld: Meld) -> None:
 
 
 def iter_discard_decisions(round_log: RoundLog, player_count: int):
-    """逐步 replay 一個 round 嘅 events，每次遇到 Discard 就 yield 一個 DiscardDecision。"""
+    """Replay a round's events step by step, yielding a DiscardDecision
+    every time a Discard is encountered."""
     concealed: list[list[Tile]] = [list(hand) for hand in round_log.hands]
     n_melds = [0] * player_count
-    n_dora = 1  # initial_dora 本身就算第一個
+    n_dora = 1  # initial_dora itself counts as the first one
 
     for index, event in enumerate(round_log.events):
         if isinstance(event, Draw):
@@ -76,7 +79,8 @@ def iter_discard_decisions(round_log: RoundLog, player_count: int):
         elif isinstance(event, Call):
             meld = event.meld
             if meld.type is MeldType.SHOUMINKAN:
-                # 加槓：由已經計過嘅 pon 升級，加嗰隻岩岩先摸到，喺 concealed 度
+                # Added kan: upgrades an already-counted pon; the added
+                # tile was just drawn and is still in concealed.
                 concealed[event.seat].remove(meld.added)  # type: ignore[arg-type]
             else:
                 _remove_meld_tiles(concealed[event.seat], meld)
@@ -91,23 +95,25 @@ def iter_discard_decisions(round_log: RoundLog, player_count: int):
 
 @dataclass(frozen=True)
 class FullDiscardState:
-    """一個掉牌決策嘅完整場面：自己私人狀態 + 4 個 seat 嘅公開資訊。
+    """The full game state of a discard decision: one's own private state
+    + public information for all 4 seats.
 
-    用喺 Step 4（feature encoding），同 DiscardDecision 分開係因為
-    Step 3 已經驗證過 iter_discard_decisions 出嚟嘅 dataset 啱，
-    唔想為咗加公開資訊而動嗰段已經核實過嘅 code。
+    Used for Step 4 (feature encoding); kept separate from DiscardDecision
+    because Step 3 already validated that iter_discard_decisions produces
+    a correct dataset, and we don't want to touch that already-verified
+    code just to add public information.
     """
 
     event_index: int
     seat: int
-    hand_counts: list[int]  # 34，自己 concealed hand
+    hand_counts: list[int]  # 34, own concealed hand
     hand_red_counts: list[int]  # 34
-    meld_counts: list[list[int]]  # 4 x 34，每個 seat 已 meld 嘅牌
-    discard_counts: list[list[int]]  # 4 x 34，每個 seat 牌河
+    meld_counts: list[list[int]]  # 4 x 34, each seat's melded tiles
+    discard_counts: list[list[int]]  # 4 x 34, each seat's discard pile
     riichi: list[bool]  # 4
-    dora_tiles: list[int]  # 現正生效嘅 dora 牌 type（可以有重複）
+    dora_tiles: list[int]  # currently active dora tile types (can repeat)
     round_wind: int
-    seat_wind: int  # 揀緊嘢嗰個 seat 嘅自風
+    seat_wind: int  # the seat wind of the seat currently deciding
     discard_tile: int
     discard_is_red: bool
     is_riichi: bool
@@ -115,7 +121,8 @@ class FullDiscardState:
 
 
 def iter_full_discard_states(round_log: RoundLog, player_count: int):
-    """同 iter_discard_decisions 一樣咁 replay，但連 4 個 seat 嘅公開資訊都track埋。"""
+    """Same replay as iter_discard_decisions, but also tracks public
+    information for all 4 seats."""
     concealed: list[list[Tile]] = [list(hand) for hand in round_log.hands]
     meld_counts = [[0] * 34 for _ in range(player_count)]
     discard_counts = [[0] * 34 for _ in range(player_count)]
