@@ -1,4 +1,4 @@
-"""Step B (task.md): generate three mask sets from connectome edge weights.
+"""Step B: generate three mask sets from connectome edge weights.
 
 Writes data/processed/masks.npz, containing:
   - mask_pn_kc_real   : (n_kc, n_pn)      real connectome mask

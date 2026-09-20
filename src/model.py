@@ -1,5 +1,5 @@
 """Network architecture for mahjong discard prediction (following the
-diagram in docs/task.md):
+original task brief's diagram):
 
   mahjong feature (C x 34)
     -> Conv1d front-end
@@ -9,10 +9,10 @@ diagram in docs/task.md):
     -> MaskedLinear(KC -> MBON)
     -> Linear -> 34 logits
 
-The ReLU only sits between the two MaskedLinear layers, following
-task.md's diagram literally (how many layers the Conv1d front-end uses,
-and whether it has ReLU, is this module's own implementation detail — not
-specified in the diagram, added following common practice).
+The ReLU only sits between the two MaskedLinear layers, following that
+diagram literally (how many layers the Conv1d front-end uses, and whether
+it has ReLU, is this module's own implementation detail — not specified in
+the diagram, added following common practice).
 """
 
 import torch

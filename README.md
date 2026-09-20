@@ -43,7 +43,7 @@ This project asks a narrower, cleaner question instead:
 
 In short: **what wins is the "sparse expansion" shape, not the fly's
 particular wiring diagram.** Full methodology/statistics/limitations are in
-[`docs/writeup.md`](docs/writeup.md) (Cantonese).
+[`docs/writeup.md`](docs/writeup.md).
 
 ### Follow-up: does more data help more than the wiring does?
 
@@ -105,9 +105,7 @@ is gitignored and needs to be regenerated locally:
 | — | `src/build_action_dataset_scaled.py` → `build_action_features_scaled.py` → `train_action_model.py` | `data/processed/action_model_arm_a.pt`, retrained on the scaled 10-year dataset | 2010–2018 mahjong logs + masks |
 
 For the full file index, what each step does, and why it's designed this
-way, see [`docs/writeup.md`](docs/writeup.md) (the research
-write-up) and [`docs/task.md`](docs/task.md) (the original task
-brief) — both in Cantonese.
+way, see [`docs/writeup.md`](docs/writeup.md) (the research write-up).
 
 ## Setup
 

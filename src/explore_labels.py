@@ -1,6 +1,6 @@
-"""Step A (task.md): find the KC / MBON / PN label sets in annotations.feather.
+"""Step A: find the KC / MBON / PN label sets in annotations.feather.
 
-Which column and condition to use for KC was already confirmed in task.md.
+Which column and condition to use for KC was already confirmed for the project.
 MBON and PN weren't confirmed yet, so this script first explores (prints
 every value in the class/superclass columns), then summarizes the
 candidate definitions found so the user can eyeball-check them.
@@ -108,10 +108,10 @@ def main() -> None:
     )
 
     # ------------------------------------------------------------------
-    # Sanity check: compare against the order-of-magnitude expected in task.md
+    # Sanity check: compare against the order-of-magnitude originally expected
     # ------------------------------------------------------------------
     print(f"\n{'=' * 70}")
-    print("=== Sanity check (vs. task.md's expected order of magnitude) ===")
+    print("=== Sanity check (vs. the originally expected order of magnitude) ===")
     print(f"{'=' * 70}")
     print(f"KC   : {kc.height} cells (expected ~4000)")
     print(f"MBON : {mbon.height} cells, {mbon['type'].n_unique()} types (expected 100-200 cells, 30-100 types)")

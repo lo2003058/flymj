@@ -5,7 +5,7 @@ Uses only 2009 (already downloaded) — no further years — since all three
 arms use the same data, so no era's meta can favor any particular arm, and
 downloading more years just adds ToS risk and download time with no
 experimental benefit. MAX_FILES is chosen to bring the total decision
-count close to task.md's 1-2 million target (see explore_paifu.py: one
+count close to the original task's 1-2 million target (see explore_paifu.py: one
 year has 6897 files, averaging ~515 decisions each).
 
 Writes data/processed/discard_dataset.parquet, one row per discard decision:

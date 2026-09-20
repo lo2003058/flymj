@@ -1,4 +1,4 @@
-"""Step C (task.md): plot in-degree distributions, comparing the real mask
+"""Step C: plot in-degree distributions, comparing the real mask
 against the random mask.
 
 Since the random mask is generated per-node degree-matched, the real and

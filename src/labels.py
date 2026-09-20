@@ -1,13 +1,13 @@
 """KC / MBON / PN label definitions.
 
 These three definitions were confirmed against the printed output of
-explore_labels.py (see docs/task.md):
+explore_labels.py:
   - KC   : `type` column starts_with('KC')                       (confirmed)
   - MBON : `class` column == 'MBON'                               (confirmed, 97 cells / 37 types)
   - PN   : `class` column == 'ALPN', excluding `type` starting with
            'M_' (multiglomerular)                                 (confirmed, 387 cells / 101 types)
 
-387 is higher than the 100-200 originally expected in task.md — likely
+387 is higher than the 100-200 originally expected — likely
 because that expectation came from older single-hemisphere literature,
 while this male CNS dataset covers both hemispheres (387 ≈ 190 per side
 x2). Confirmed with the user to proceed with 387.
