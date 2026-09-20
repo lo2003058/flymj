@@ -106,7 +106,7 @@ buffer，masked-out 嘅位永遠係 0。
 
 ## 結果
 
-![Arm comparison](../../artifacts/arm_comparison.png)
+![Arm comparison](../artifacts/arm_comparison.png)
 
 | Arm | n (seed 數) | mean test_acc | std | min | max |
 |---|---|---|---|---|---|

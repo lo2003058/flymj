@@ -10,10 +10,9 @@ wheels/
 .venv
 
 # Downloaded / generated data (raw connectome + mahjong files are GB-scale).
-# data/doc/ is hand-written documentation, not generated data, so it's kept
-# tracked normally instead of needing `git add -f` every time it's edited.
-data/*
-!data/doc/
+# Hand-written docs live in docs/ at the repo root instead, not under
+# here, so there's no exception to carve out.
+data/
 
 # IDE
 .idea/

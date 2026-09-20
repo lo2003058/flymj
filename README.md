@@ -43,7 +43,7 @@ This project asks a narrower, cleaner question instead:
 
 In short: **what wins is the "sparse expansion" shape, not the fly's
 particular wiring diagram.** Full methodology/statistics/limitations are in
-[`data/doc/writeup.md`](data/doc/writeup.md) (Cantonese).
+[`docs/writeup.md`](docs/writeup.md) (Cantonese).
 
 ### Follow-up: does more data help more than the wiring does?
 
@@ -60,7 +60,7 @@ and just train it on 10x more data (2009-2018, ~15.5M decisions instead of
 d=36.78 — an order of magnitude larger effect than any wiring comparison
 above. At this task, dataset scale matters far more than which sparse
 wiring pattern is used. Full details in the "Follow-up 實驗：Dataset
-Scaling" section of [`data/doc/writeup.md`](data/doc/writeup.md).
+Scaling" section of [`docs/writeup.md`](docs/writeup.md).
 
 The deployed `action_model_arm_a.pt` (the multi-head model the playable
 game actually uses for calls/riichi/tsumo/defense) was retrained the same
@@ -88,9 +88,9 @@ uv run streamlit run src/game_app.py --server.port 8502
 
 ## Rebuilding the pipeline from scratch
 
-This project started as an 8-step research pipeline. Everything under
-`data/` except `data/doc/` (raw connectome + mahjong logs + training
-artifacts, several GB) is gitignored and needs to be regenerated locally:
+This project started as an 8-step research pipeline. The entire `data/`
+directory (raw connectome + mahjong logs + training artifacts, several GB)
+is gitignored and needs to be regenerated locally:
 
 | # | Script | Produces | Needs |
 |---|---|---|---|
@@ -105,8 +105,8 @@ artifacts, several GB) is gitignored and needs to be regenerated locally:
 | — | `src/build_action_dataset_scaled.py` → `build_action_features_scaled.py` → `train_action_model.py` | `data/processed/action_model_arm_a.pt`, retrained on the scaled 10-year dataset | 2010–2018 mahjong logs + masks |
 
 For the full file index, what each step does, and why it's designed this
-way, see [`data/doc/writeup.md`](data/doc/writeup.md) (the research
-write-up) and [`data/doc/task.md`](data/doc/task.md) (the original task
+way, see [`docs/writeup.md`](docs/writeup.md) (the research
+write-up) and [`docs/task.md`](docs/task.md) (the original task
 brief) — both in Cantonese.
 
 ## Setup
@@ -150,5 +150,5 @@ dictionary-encoding bug when reading the raw feather files).
   model itself hasn't been tuned and shouldn't be compared against
   state-of-the-art on absolute performance.
 
-See the "Limitations" section of [`data/doc/writeup.md`](data/doc/writeup.md)
+See the "Limitations" section of [`docs/writeup.md`](docs/writeup.md)
 for the full version.

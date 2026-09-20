@@ -1,5 +1,5 @@
 """Network architecture for mahjong discard prediction (following the
-diagram in data/doc/task.md):
+diagram in docs/task.md):
 
   mahjong feature (C x 34)
     -> Conv1d front-end

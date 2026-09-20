@@ -1,7 +1,7 @@
 """KC / MBON / PN label definitions.
 
 These three definitions were confirmed against the printed output of
-explore_labels.py (see data/doc/task.md):
+explore_labels.py (see docs/task.md):
   - KC   : `type` column starts_with('KC')                       (confirmed)
   - MBON : `class` column == 'MBON'                               (confirmed, 97 cells / 37 types)
   - PN   : `class` column == 'ALPN', excluding `type` starting with
